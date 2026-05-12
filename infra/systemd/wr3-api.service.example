@@ -1,0 +1,19 @@
+[Unit]
+Description=wr3 FastAPI core API
+After=network.target postgresql.service redis-server.service
+
+[Service]
+User=wr3
+Group=wr3
+WorkingDirectory=/opt/wr3/app
+EnvironmentFile=/etc/wr3/wr3.env
+ExecStart=/opt/wr3/app/apps/api/.venv/bin/uvicorn wr3_api.main:app --app-dir apps/api --host 127.0.0.1 --port 8001
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/wr3/app/.omx /opt/wr3/artifacts
+
+[Install]
+WantedBy=multi-user.target

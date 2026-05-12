@@ -1,0 +1,19 @@
+[Unit]
+Description=wr3 Celery worker
+After=network.target redis-server.service postgresql.service
+
+[Service]
+User=wr3
+Group=wr3
+WorkingDirectory=/opt/wr3/app
+EnvironmentFile=/etc/wr3/wr3.env
+ExecStart=/opt/wr3/app/apps/api/.venv/bin/celery -A wr3_api.workers.celery_app.celery_app worker --loglevel=info --concurrency=2
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/wr3/app/.omx /opt/wr3/artifacts
+
+[Install]
+WantedBy=multi-user.target

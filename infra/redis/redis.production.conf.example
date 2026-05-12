@@ -1,0 +1,9 @@
+# wr3 Redis baseline for queue, short locks, and rate-limit counters.
+
+bind 127.0.0.1
+protected-mode yes
+appendonly yes
+appendfsync everysec
+maxmemory-policy noeviction
+timeout 0
+tcp-keepalive 300

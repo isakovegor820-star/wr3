@@ -1,0 +1,30 @@
+[
+  {
+    "id": "evm-tx-origin",
+    "chain": "base",
+    "address": "0x0000000000000000000000000000000000000000",
+    "source": "contract Vault { function auth(address expected) public view { require(tx.origin == expected); } }",
+    "expected_categories": ["access_control"]
+  },
+  {
+    "id": "evm-delegatecall",
+    "chain": "ethereum",
+    "address": "0x0000000000000000000000000000000000000000",
+    "source": "contract Proxy { function exec(address target, bytes memory data) public { target.delegatecall(data); } }",
+    "expected_categories": ["upgradeability"]
+  },
+  {
+    "id": "evm-clean-info",
+    "chain": "arbitrum",
+    "address": "0x0000000000000000000000000000000000000000",
+    "source": "contract Plain { function ping() external pure returns (uint256) { return 1; } }",
+    "expected_categories": []
+  },
+  {
+    "id": "solana-unchecked-account",
+    "chain": "solana",
+    "address": "So11111111111111111111111111111111111111112",
+    "source": "use anchor_lang::prelude::*; #[derive(Accounts)] pub struct Withdraw<'info> { pub vault: UncheckedAccount<'info>, pub signer: Signer<'info> }",
+    "expected_categories": ["solana_account_validation"]
+  }
+]

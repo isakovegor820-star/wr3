@@ -1,0 +1,16 @@
+[
+  {
+    "id": "sealevel-missing-signer-sample",
+    "chain": "solana",
+    "address": "So11111111111111111111111111111111111111112",
+    "source": "use anchor_lang::prelude::*; #[program] pub mod bad_auth { use super::*; pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> { Ok(()) } } #[derive(Accounts)] pub struct Withdraw<'info> { pub authority: AccountInfo<'info>, #[account(mut)] pub vault: AccountInfo<'info> }",
+    "expected_categories": ["solana_signer"]
+  },
+  {
+    "id": "sealevel-pda-validation-sample",
+    "chain": "solana",
+    "address": "So11111111111111111111111111111111111111113",
+    "source": "use anchor_lang::prelude::*; #[derive(Accounts)] pub struct Update<'info> { #[account(mut)] pub config: AccountInfo<'info>, pub authority: Signer<'info> }",
+    "expected_categories": ["solana_pda"]
+  }
+]

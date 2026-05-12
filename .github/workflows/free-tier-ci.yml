@@ -1,0 +1,27 @@
+name: free-tier-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: npm ci
+      - run: python -m venv apps/api/.venv
+      - run: apps/api/.venv/bin/python -m pip install -e "apps/api[dev,secure]"
+      - run: npm run check
+      - run: npm run benchmark:mvp
+      - run: npm run free-tier:readiness
+      - run: npm audit --audit-level=high

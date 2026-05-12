@@ -1,0 +1,37 @@
+{
+  "name": "wr3-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web",
+    "packages/audit-engine",
+    "packages/scoring",
+    "packages/shared",
+    "packages/types"
+  ],
+  "scripts": {
+    "build:packages": "npm --workspace @wr3/types run build && npm --workspace @wr3/scoring run build && npm --workspace @wr3/audit-engine run build && npm --workspace @wr3/shared run build",
+    "build": "npm --workspace @wr3/types run build && npm --workspace @wr3/scoring run build && npm --workspace @wr3/audit-engine run build && npm --workspace @wr3/shared run build && npm --workspace @wr3/web run build",
+    "benchmark:mvp": "apps/api/.venv/bin/python scripts/benchmark_runner.py",
+    "calibration:scoring": "apps/api/.venv/bin/python scripts/scoring_calibration.py",
+    "free-tier:readiness": "apps/api/.venv/bin/python scripts/free_tier_readiness.py",
+    "retention:dry-run": "apps/api/.venv/bin/python scripts/retention_sweep.py --dry-run",
+    "retention:sweep": "apps/api/.venv/bin/python scripts/retention_sweep.py",
+    "check": "npm run test && npm run test:api && npm run typecheck",
+    "dev:web": "npm --workspace @wr3/types run build && npm --workspace @wr3/scoring run build && npm --workspace @wr3/audit-engine run build && npm --workspace @wr3/shared run build && npm --workspace @wr3/web run dev",
+    "license:inventory": "apps/api/.venv/bin/python scripts/license_inventory.py",
+    "test": "npm run build:packages && npm --workspaces --if-present run test",
+    "test:api": "cd apps/api && ./.venv/bin/python -m pytest",
+    "typecheck": "npm --workspaces --if-present run typecheck"
+  },
+  "overrides": {
+    "postcss": "8.5.10",
+    "next@^15.0.0": {
+      "postcss": "8.5.10"
+    }
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0"
+  }
+}

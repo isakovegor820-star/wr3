@@ -1,0 +1,697 @@
+from __future__ import annotations
+
+import asyncio
+from datetime import timedelta
+from hmac import compare_digest
+from uuid import UUID
+
+from wr3_api.adapters.base import EngineAdapter, EngineRunOptions, NormalizedSource
+from wr3_api.adapters.registry import default_adapters
+from wr3_api.core.config import get_settings
+from wr3_api.domain.enums import AuditState, Chain, Exploitability, Severity
+from wr3_api.domain.safety import (
+    detect_prompt_injection,
+    redact_findings_for_public,
+    validate_request_safety,
+)
+from wr3_api.domain.schemas import (
+    AuditEvent,
+    AuditAccessSummary,
+    AuditRecord,
+    AuditSummary,
+    DisclosureAdvanceRequest,
+    CreateAuditRequest,
+    DisclosureContactLogRequest,
+    DisclosureCase,
+    DisclosureCaseRequest,
+    EngineRunSummary,
+    Finding,
+    FindingReviewRequest,
+    PublicProjectSummary,
+    utc_now,
+)
+from wr3_api.domain.scoring import ScoreContext, score_audit
+from wr3_api.domain.state_machine import STAGE_PROGRESS, assert_transition, can_transition
+from wr3_api.services.auth import AuditAccessContext, AuthContext
+from wr3_api.services.contracts import build_source_metadata
+from wr3_api.services.explorers import ExplorerSourcePuller, default_explorer_pullers
+from wr3_api.services.fuzzing import FuzzingWorker
+from wr3_api.services.llm_triage import LlmTriageRouter
+from wr3_api.services.poc import FoundryPocWorker, high_risk_poc_candidates
+from wr3_api.services.quota import InMemoryQuotaLimiter
+from wr3_api.services.repository import (
+    AuditRepository,
+    DisclosureRepository,
+    build_audit_repository,
+    build_disclosure_repository,
+)
+from wr3_api.services.report_renderer import ReportRenderer
+from wr3_api.services.retention import RetentionRunResult, RetentionService
+from wr3_api.services.safe_harbor import SafeHarborRegistry
+from wr3_api.services.triage_agents import TriageConsensus
+from wr3_api.services.artifacts import ArtifactEncryptionRequired, ArtifactVault
+
+
+class AuditNotFound(KeyError):
+    pass
+
+
+class AuditAccessDenied(PermissionError):
+    pass
+
+
+DISCLOSURE_DEADLINE_DAYS: dict[str, int] = {
+    "private_contact_pending": 7,
+    "seal_911_escalation": 14,
+    "cve_euvd_notice": 45,
+    "limited_disclosure_allowed": 90,
+    "full_disclosure_allowed": 180,
+    "resolved": 0,
+    "closed": 0,
+}
+
+
+class AuditService:
+    def __init__(
+        self,
+        adapters: list[EngineAdapter] | None = None,
+        explorers: list[ExplorerSourcePuller] | None = None,
+        audit_repository: AuditRepository | None = None,
+        disclosure_repository: DisclosureRepository | None = None,
+        safe_harbor_registry: SafeHarborRegistry | None = None,
+    ) -> None:
+        settings = get_settings()
+        self._settings = settings
+        self._adapters = adapters or default_adapters()
+        self._explorers = explorers or default_explorer_pullers()
+        self._audit_repository = audit_repository or build_audit_repository(settings.database_url)
+        self._disclosure_repository = disclosure_repository or build_disclosure_repository(settings.database_url)
+        self._quota = InMemoryQuotaLimiter()
+        self._renderer = ReportRenderer()
+        self._poc_worker = FoundryPocWorker()
+        self._fuzz_worker = FuzzingWorker()
+        self._llm_triage = LlmTriageRouter()
+        self._triage_consensus = TriageConsensus()
+        self._safe_harbor = safe_harbor_registry or SafeHarborRegistry()
+        self._artifact_vault = ArtifactVault()
+
+    async def create_audit(self, request: CreateAuditRequest, actor: AuthContext | None = None) -> AuditRecord:
+        record = AuditRecord(request=request, user_id=actor.user_id if actor else None)
+        if request.source and len(request.source.encode("utf-8")) > self._settings.max_source_bytes:
+            record.limitations.append("source_exceeds_max_source_bytes")
+            self._audit_repository.save(record)
+            self._transition(record, AuditState.REJECTED, reason="source_too_large")
+            return record
+        record.limitations.extend(validate_request_safety(request))
+        quota = self._quota.check(
+            user_key=record.user_id or request.address or "anonymous-source",
+            tier=request.tier,
+            requested_depth=request.requested_depth,
+        )
+        record.limitations.extend(quota.limitations)
+        record.request.requested_depth = quota.effective_depth
+        record.retention_until = record.created_at + timedelta(days=quota.retention_days)
+        if actor is None or not actor.is_authenticated:
+            record.limitations.append("anonymous_owner_token_required_for_private_access")
+        record.adversarial_input_detected = detect_prompt_injection(request.source)
+        if record.adversarial_input_detected:
+            record.limitations.append("adversarial_input_detected")
+        self._audit_repository.save(record)
+
+        self._transition(record, AuditState.QUEUED, reason="audit_created")
+        return record
+
+    async def process_audit(self, audit_id: UUID) -> None:
+        record = self.get_record(audit_id)
+        if record.state != AuditState.QUEUED:
+            record.events.append(
+                AuditEvent(
+                    audit_id=record.audit_id,
+                    event_type="processor_ignored",
+                    payload={"state": record.state, "reason": "job_not_queued"},
+                )
+            )
+            self._audit_repository.save(record)
+            return
+        try:
+            await self._process_record(record)
+        except Exception as exc:  # pragma: no cover - defensive safety net
+            record.failed_stages.append("processor:unhandled_exception")
+            record.limitations.append("audit_processing_failed_internal_error")
+            record.events.append(
+                AuditEvent(
+                    audit_id=record.audit_id,
+                    event_type="processor_failed",
+                    payload={"error_type": exc.__class__.__name__},
+                )
+            )
+            if can_transition(record.state, AuditState.FAILED):
+                self._transition(record, AuditState.FAILED, reason="processor_failed")
+            else:
+                self._audit_repository.save(record)
+
+    def get_record(self, audit_id: UUID) -> AuditRecord:
+        try:
+            record = self._audit_repository.get(audit_id)
+        except KeyError as exc:
+            raise AuditNotFound(str(audit_id)) from exc
+        if record is None:
+            raise AuditNotFound(str(audit_id))
+        return record
+
+    def get_summary(self, audit_id: UUID, access: AuditAccessContext | None = None) -> AuditSummary:
+        record = self.get_record(audit_id)
+        access_summary = self._access_summary(record, access)
+        if not access_summary.is_owner and not access_summary.is_public_view:
+            raise AuditAccessDenied("private_audit_requires_owner_or_public_token")
+        return record.to_summary(progress=STAGE_PROGRESS[record.state], access=access_summary)
+
+    def get_events(self, audit_id: UUID, access: AuditAccessContext | None = None) -> list[AuditEvent]:
+        record = self.get_record(audit_id)
+        self._ensure_owner(record, access)
+        return record.events
+
+    def get_findings(
+        self,
+        audit_id: UUID,
+        *,
+        public: bool = False,
+        access: AuditAccessContext | None = None,
+    ) -> list[Finding]:
+        record = self.get_record(audit_id)
+        if public:
+            return redact_findings_for_public(record.findings)
+        self._ensure_owner(record, access)
+        return record.findings
+
+    def render_report(
+        self,
+        audit_id: UUID,
+        *,
+        fmt: str = "markdown",
+        access: AuditAccessContext | None = None,
+    ) -> str:
+        record = self.get_record(audit_id)
+        self._ensure_owner_or_report_token(record, access)
+        if fmt == "html":
+            return self._renderer.render_html(record)
+        return self._renderer.render_markdown(record)
+
+    def raw_outputs_metadata(self, audit_id: UUID, access: AuditAccessContext | None = None) -> dict[str, object]:
+        record = self.get_record(audit_id)
+        self._ensure_owner(record, access)
+        return {
+            "audit_id": str(record.audit_id),
+            "gated": True,
+            "reason": "raw_outputs_require_paid_tier_artifact_access",
+            "owner_verified": True,
+            "engines": [
+                {
+                    "engine": run.engine,
+                    "status": run.status,
+                    "duration_ms": run.duration_ms,
+                    "artifact_uri": run.artifact_uri,
+                    "error": run.error,
+                }
+                for run in record.engine_runs
+            ],
+        }
+
+    def review_finding(
+        self,
+        audit_id: UUID,
+        finding_id: str,
+        request: FindingReviewRequest,
+        actor: AuthContext | None = None,
+    ) -> Finding:
+        if actor is None or not actor.is_reviewer:
+            raise AuditAccessDenied("reviewer_access_required_for_finding_review")
+        record = self.get_record(audit_id)
+        for index, finding in enumerate(record.findings):
+            if finding.id != finding_id:
+                continue
+            updated = finding.model_copy(update={"human_review_status": request.status})
+            record.findings[index] = updated
+            record.events.append(
+                AuditEvent(
+                    audit_id=record.audit_id,
+                    event_type="finding_reviewed",
+                    payload={
+                        "finding_id": finding_id,
+                        "status": request.status,
+                        "note": request.note,
+                    },
+                )
+            )
+            self._audit_repository.save(record)
+            return updated
+        raise AuditNotFound(finding_id)
+
+    def create_disclosure_case(
+        self,
+        request: DisclosureCaseRequest,
+        actor: AuthContext | None = None,
+    ) -> DisclosureCase:
+        if actor is None or not actor.is_reviewer:
+            raise AuditAccessDenied("reviewer_access_required_for_disclosure_case")
+        case = DisclosureCase(
+            finding_id=request.finding_id,
+            contact_log=[
+                "Day 0: private responsible disclosure case opened.",
+                f"Contact target captured: {request.project_contact}",
+                f"Scope note: {request.scope_note}",
+            ],
+        )
+        self._disclosure_repository.save(case)
+        return case
+
+    def get_disclosure_case(self, case_id: str, actor: AuthContext | None = None) -> DisclosureCase:
+        if actor is None or not actor.is_reviewer:
+            raise AuditAccessDenied("reviewer_access_required_for_disclosure_case")
+        case = self._disclosure_repository.get(case_id)
+        if case is None:
+            raise AuditNotFound(case_id)
+        return case
+
+    def append_disclosure_contact(
+        self,
+        case_id: str,
+        request: DisclosureContactLogRequest,
+        actor: AuthContext | None = None,
+    ) -> DisclosureCase:
+        case = self.get_disclosure_case(case_id, actor)
+        case.contact_log.append(f"{utc_now().date().isoformat()} [{request.channel}]: {request.message}")
+        self._disclosure_repository.save(case)
+        return case
+
+    def advance_disclosure_case(
+        self,
+        case_id: str,
+        request: DisclosureAdvanceRequest,
+        actor: AuthContext | None = None,
+    ) -> DisclosureCase:
+        case = self.get_disclosure_case(case_id, actor)
+        if request.status not in DISCLOSURE_DEADLINE_DAYS:
+            raise ValueError("unsupported_disclosure_status")
+        case.status = request.status
+        if request.note:
+            case.contact_log.append(f"{utc_now().date().isoformat()} [status-note]: {request.note}")
+        case.deadline_next = case.created_at + timedelta(days=DISCLOSURE_DEADLINE_DAYS[request.status])
+        self._disclosure_repository.save(case)
+        return case
+
+    async def retry(self, audit_id: UUID, access: AuditAccessContext | None = None) -> AuditRecord:
+        record = self.get_record(audit_id)
+        self._ensure_owner(record, access)
+        if record.state not in {AuditState.FAILED, AuditState.PARTIAL, AuditState.NEEDS_SOURCE}:
+            record.limitations.append("retry_ignored_current_state_not_retryable")
+            return record
+        if record.state == AuditState.NEEDS_SOURCE:
+            self._transition(record, AuditState.QUEUED, reason="source_retry_requeued")
+            return record
+        self._transition(record, AuditState.RETRYING, reason="manual_retry")
+        self._transition(record, AuditState.QUEUED, reason="retry_requeued")
+        return record
+
+    def delete_audit(self, audit_id: UUID, access: AuditAccessContext | None = None) -> dict[str, object]:
+        record = self.get_record(audit_id)
+        self._ensure_owner(record, access)
+        deleted = self._audit_repository.delete(audit_id)
+        return {
+            "audit_id": str(audit_id),
+            "deleted": deleted,
+            "retention_action": "owner_requested_delete",
+        }
+
+    def run_retention_sweep(self, *, dry_run: bool = False) -> RetentionRunResult:
+        return RetentionService(self._audit_repository).run_once(dry_run=dry_run)
+
+    def public_project(self, chain: Chain, address: str) -> PublicProjectSummary:
+        latest = next(
+            (
+                record
+                for record in reversed(self._audit_repository.list_records())
+                if record.request.chain == chain and record.request.address == address
+            ),
+            None,
+        )
+        if latest is None:
+            return PublicProjectSummary(
+                chain=chain,
+                address=address,
+                limitations=["no_public_wr3_audit_for_contract"],
+            )
+        return PublicProjectSummary(
+            chain=chain,
+            address=address,
+            score=latest.score,
+            safe_harbor_status=self._safe_harbor.is_registered(chain, address),
+            public_findings=redact_findings_for_public(latest.findings),
+            limitations=["public_page_redacts_private_findings", *latest.limitations],
+        )
+
+    async def _process_record(self, record: AuditRecord) -> None:
+        if not record.request.source:
+            self._transition(record, AuditState.INGESTING, reason="ingestion_started")
+            pulled = await self._pull_verified_source(record)
+            if pulled is None:
+                if record.request.allow_bytecode_only and record.request.chain != Chain.SOLANA:
+                    record.request.source = self._bytecode_only_source(record)
+                    record.source_metadata = build_source_metadata(
+                        source=record.request.source,
+                        origin="bytecode_only",
+                        bytecode_only=True,
+                    )
+                    record.limitations.extend(
+                        [
+                            "bytecode_only_limited_scan",
+                            "verified_source_missing_static_signal_limited",
+                        ]
+                    )
+                    record.events.append(
+                        AuditEvent(
+                            audit_id=record.audit_id,
+                            event_type="bytecode_only_fallback",
+                            payload={
+                                "chain": record.request.chain,
+                                "address": record.request.address,
+                                "source_hash": record.source_metadata.source_hash,
+                            },
+                        )
+                    )
+                else:
+                    self._transition(record, AuditState.NEEDS_SOURCE, reason="source_required")
+                    self._audit_repository.save(record)
+                    return
+            else:
+                record.request.source = pulled.source
+                record.source_metadata = build_source_metadata(
+                    source=pulled.source,
+                    origin="explorer",
+                    verified_at=pulled.verified_at,
+                    explorer_url=pulled.explorer_url,
+                    explorer_metadata=pulled.metadata,
+                )
+                record.limitations.extend(
+                    limitation
+                    for limitation in [
+                        f"source_pulled_from_{pulled.explorer_url}" if pulled.explorer_url else None,
+                        *record.source_metadata.proxy_info.limitations,
+                    ]
+                    if limitation
+                )
+        else:
+            self._transition(record, AuditState.INGESTING, reason="ingestion_started")
+            record.source_metadata = build_source_metadata(
+                source=record.request.source,
+                origin="pasted",
+            )
+            record.limitations.extend(record.source_metadata.proxy_info.limitations)
+        record.events.append(
+            AuditEvent(
+                audit_id=record.audit_id,
+                event_type="source_metadata",
+                payload={
+                    "origin": record.source_metadata.source_origin,
+                    "source_hash": record.source_metadata.source_hash,
+                    "bytecode_only": record.source_metadata.bytecode_only,
+                    "verified_at": record.source_metadata.verified_at.isoformat()
+                    if record.source_metadata.verified_at
+                    else None,
+                    "proxy_info": record.source_metadata.proxy_info.model_dump(mode="json"),
+                    "retention_until": record.retention_until.isoformat() if record.retention_until else None,
+                },
+            )
+        )
+
+        source_text = record.request.source or ""
+        source = NormalizedSource(
+            chain=record.request.chain,
+            address=record.request.address,
+            source=source_text,
+            contract_name=self._guess_contract_name(source_text),
+            file_name="Contract.sol",
+        )
+
+        self._transition(record, AuditState.STATIC_RUNNING, reason="static_started")
+        await self._run_static(record, source)
+
+        self._transition(record, AuditState.TRIAGE_RUNNING, reason="triage_started")
+        route = self._llm_triage.route(record)
+        prompt_preview = self._llm_triage.build_prompt_preview(record, source_text)
+        triage_result = await self._llm_triage.triage(
+            record,
+            source_text,
+            self._deterministic_triage,
+            route=route,
+        )
+        record.limitations.extend(triage_result.limitations)
+        record.events.append(
+            AuditEvent(
+                audit_id=record.audit_id,
+                event_type="llm_triage_route",
+                payload={
+                    "provider": route.provider,
+                    "model": route.model,
+                    "enabled": route.enabled,
+                    "zdr_required": route.zdr_required,
+                    "provider_invoked": triage_result.provider_invoked,
+                    "fallback": "deterministic" if triage_result.error_type or not route.enabled else "provider_then_deterministic",
+                    "error_type": triage_result.error_type,
+                    "agent_roles": list(self._llm_triage.agent_roles),
+                    "agent_payloads_received": sorted(triage_result.agent_payloads),
+                    "prompt_wrapped_untrusted_source": "UNTRUSTED_CONTRACT_SOURCE_BEGIN" in prompt_preview,
+                },
+            )
+        )
+        consensus = self._triage_consensus.run(triage_result.findings)
+        record.findings = consensus.findings
+        record.events.append(
+            AuditEvent(
+                audit_id=record.audit_id,
+                event_type="triage_consensus",
+                payload={
+                    **consensus.summary,
+                    "agents": list(self._triage_consensus.agents),
+                    "verdicts": [
+                        {
+                            "agent": verdict.agent,
+                            "finding_id": verdict.finding_id,
+                            "action": verdict.action,
+                            "reason": verdict.reason,
+                        }
+                        for verdict in consensus.verdicts
+                    ],
+                },
+            )
+        )
+
+        if self._poc_worker.should_consider(record):
+            self._transition(record, AuditState.POC_RUNNING, reason="poc_started")
+            candidates = high_risk_poc_candidates(record.findings)
+            poc_result = await self._poc_worker.run(record, candidates)
+            self._poc_worker.record_result(record, poc_result, candidates)
+            if record.request.requested_depth == "deep":
+                self._transition(record, AuditState.FUZZING_RUNNING, reason="fuzzing_started")
+                fuzz_result = await self._fuzz_worker.run(record, record.findings)
+                self._fuzz_worker.record_result(record, fuzz_result)
+        else:
+            record.limitations.append("poc_requires_standard_or_deep_depth")
+
+        self._transition(record, AuditState.SCORING, reason="scoring_started")
+        record.score = score_audit(
+            record.findings,
+            ScoreContext(
+                unverified_source=record.source_metadata.bytecode_only,
+                unlimited_owner_mint=any(
+                    finding.taxonomy.wr3_category == "centralization"
+                    for finding in record.findings
+                    if finding.severity in {Severity.LOW, Severity.MEDIUM}
+                ),
+            ),
+        )
+        if any(
+            finding.severity in {Severity.CRITICAL, Severity.HIGH}
+            and finding.human_review_status != "approved"
+            for finding in record.findings
+        ):
+            record.limitations.append("high_risk_findings_require_human_review_before_public_claim")
+        self._transition(record, AuditState.COMPLETED, reason="report_ready")
+        self._audit_repository.save(record)
+
+    async def _pull_verified_source(self, record: AuditRecord):
+        if not record.request.address:
+            record.limitations.append("source_required_no_address_for_explorer_pull")
+            return None
+        supported = [puller for puller in self._explorers if puller.supports(record.request.chain)]
+        if not supported:
+            record.limitations.append(f"verified_source_pull_not_configured_for_{record.request.chain}")
+            return None
+        for puller in supported:
+            result = await puller.pull(chain=record.request.chain, address=record.request.address)
+            if result.status == "verified" and result.source:
+                record.events.append(
+                    AuditEvent(
+                        audit_id=record.audit_id,
+                        event_type="source_pulled",
+                        payload={
+                            "puller": puller.name,
+                            "contract_name": result.contract_name,
+                            "file_name": result.file_name,
+                            "explorer_url": result.explorer_url,
+                        },
+                    )
+                )
+                return result
+            record.limitations.append(f"{puller.name}:{result.status}:{result.reason}")
+        record.limitations.append("verified_source_pull_failed_upload_source")
+        return None
+
+    def _bytecode_only_source(self, record: AuditRecord) -> str:
+        return "\n".join(
+            [
+                "// wr3 bytecode-only limited scan placeholder",
+                "// Verified source was unavailable; static source-level analysis is intentionally limited.",
+                f"// chain: {record.request.chain}",
+                f"// address: {record.request.address}",
+                "contract Wr3BytecodeOnlyPlaceholder {}",
+            ]
+        )
+
+    async def _run_static(self, record: AuditRecord, source: NormalizedSource) -> None:
+        options = EngineRunOptions(audit_id=str(record.audit_id))
+        supported = [adapter for adapter in self._adapters if adapter.supports(source)]
+        results = await asyncio.gather(*(adapter.run(source, options) for adapter in supported))
+
+        for result in results:
+            record.findings.extend(result.findings)
+            record.engine_runs.append(
+                EngineRunSummary(
+                    audit_id=record.audit_id,
+                    engine=result.engine,
+                    status=result.status,
+                    duration_ms=result.duration_ms,
+                    artifact_uri=self._store_raw_output_artifact(record, result),
+                    error=result.error,
+                )
+            )
+            if result.status == "failed":
+                record.failed_stages.append(f"static:{result.engine}")
+            if result.status == "skipped":
+                record.limitations.append(f"{result.engine}_skipped:{result.error}")
+
+        if not record.findings:
+            record.failed_stages.append("static:no_findings_or_engines")
+
+    def _store_raw_output_artifact(self, record: AuditRecord, result) -> str | None:
+        if not result.raw_output:
+            return None
+        try:
+            artifact = self._artifact_vault.store_json(
+                audit_id=str(record.audit_id),
+                kind="raw_output",
+                payload={
+                    "engine": result.engine,
+                    "status": result.status,
+                    "raw_output": result.raw_output,
+                    "error": result.error,
+                },
+                private=True,
+            )
+        except ArtifactEncryptionRequired:
+            record.limitations.append(f"{result.engine}_raw_output_artifact_requires_encryption")
+            return None
+        return artifact.uri
+
+    def _deterministic_triage(self, findings: list[Finding]) -> list[Finding]:
+        deduped: dict[tuple[str, str, str], Finding] = {}
+        for finding in findings:
+            key = (finding.summary.lower(), finding.taxonomy.wr3_category, finding.severity)
+            current = deduped.get(key)
+            if current is None or finding.confidence > current.confidence:
+                deduped[key] = finding
+
+        triaged: list[Finding] = []
+        for finding in deduped.values():
+            if finding.severity == Severity.INFO:
+                triaged.append(finding)
+                continue
+            if finding.confidence < 0.3:
+                triaged.append(
+                    finding.model_copy(
+                        update={
+                            "exploitability": Exploitability.DISMISSED,
+                            "dismissal_reason": "confidence_below_mvp_threshold",
+                        }
+                    )
+                )
+            else:
+                triaged.append(finding)
+        return triaged
+
+    def _transition(self, record: AuditRecord, to_state: AuditState, *, reason: str) -> None:
+        assert_transition(record.state, to_state)
+        record.state = to_state
+        record.updated_at = utc_now()
+        record.events.append(
+            AuditEvent(
+                audit_id=record.audit_id,
+                event_type="state_transition",
+                payload={"to": to_state, "reason": reason},
+            )
+        )
+        self._audit_repository.save(record)
+
+    def _access_summary(
+        self,
+        record: AuditRecord,
+        access: AuditAccessContext | None,
+    ) -> AuditAccessSummary:
+        is_owner = self._is_owner(record, access)
+        is_public_view = (
+            record.request.visibility == "public"
+            or self._public_token_matches(record, access.public_token if access else None)
+        )
+        return AuditAccessSummary(
+            is_owner=is_owner,
+            is_public_view=is_public_view,
+            can_view_private_findings=is_owner,
+            can_view_raw_outputs=is_owner and record.request.tier in {"team", "pro"},
+            auth_provider=access.actor.provider if access and access.actor.provider else None,
+        )
+
+    def _ensure_owner(self, record: AuditRecord, access: AuditAccessContext | None) -> None:
+        if not self._is_owner(record, access):
+            raise AuditAccessDenied("owner_access_required")
+
+    def _ensure_owner_or_report_token(
+        self,
+        record: AuditRecord,
+        access: AuditAccessContext | None,
+    ) -> None:
+        if self._is_owner(record, access):
+            return
+        if access is not None and self._public_token_matches(record, access.public_token):
+            return
+        raise AuditAccessDenied("owner_or_report_token_required")
+
+    def _is_owner(self, record: AuditRecord, access: AuditAccessContext | None) -> bool:
+        if access is None:
+            return False
+        if access.actor.is_reviewer:
+            return True
+        if record.user_id and access.actor.user_id == record.user_id:
+            return True
+        if access.owner_token and compare_digest(record.owner_access_token, access.owner_token):
+            return True
+        return False
+
+    def _public_token_matches(self, record: AuditRecord, token: str | None) -> bool:
+        return bool(record.public_report_token and token and compare_digest(record.public_report_token, token))
+
+    def _guess_contract_name(self, source: str) -> str:
+        marker = "contract "
+        if marker not in source:
+            return "Contract"
+        tail = source.split(marker, 1)[1]
+        return tail.split("{", 1)[0].split()[0].strip() or "Contract"

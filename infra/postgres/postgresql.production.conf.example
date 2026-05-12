@@ -1,0 +1,15 @@
+# wr3 Oracle Always Free baseline for Postgres 17.
+# Review with `SHOW config_file;` before applying.
+
+listen_addresses = '127.0.0.1'
+max_connections = 80
+shared_buffers = 4GB
+effective_cache_size = 12GB
+maintenance_work_mem = 1GB
+work_mem = 16MB
+wal_compression = on
+checkpoint_completion_target = 0.9
+log_min_duration_statement = 1000
+log_checkpoints = on
+log_connections = off
+log_disconnections = off
