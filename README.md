@@ -18,9 +18,10 @@ boundaries, with external provider execution disabled unless configured.
 - Reproducible `wr3-score-v0.1` scoring with the public MVP weights.
 - FastAPI endpoints for audit creation, status, findings, reports, retry, and
   public project summaries.
-- Optional Postgres persistence behind `WR3_DATABASE_URL`; in-memory storage
-  remains the zero-config default. Audit events, engine runs, and findings are
-  also written to normalized tables when Postgres is enabled.
+- Native localhost Postgres persistence behind `WR3_DATABASE_URL`; in-memory
+  storage remains available only as an explicit fallback. Audit events, engine
+  runs, and findings are also written to normalized tables when Postgres is
+  enabled.
 - Server-side Free/Hobby/Team/Pro tier policy with depth caps and degraded quota
   mode.
 - One-shot audit package catalog for quickcheck/PoC/deep AI-assisted reports.
@@ -71,25 +72,30 @@ Install Python dependencies:
 
 ```bash
 python3 -m venv apps/api/.venv
-apps/api/.venv/bin/python -m pip install -e "apps/api[dev]"
+apps/api/.venv/bin/python -m pip install -e "apps/api[dev,worker,secure]"
 ```
 
-Optional local Postgres:
+Prepare native localhost services:
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d postgres
-export WR3_DATABASE_URL=postgresql://wr3:wr3_dev_only@127.0.0.1:5432/wr3
+npm run setup:native
+npm run local:readiness
 ```
 
-Run the API:
+This installs/starts Homebrew PostgreSQL 17 and Redis when needed, creates the
+`wr3_local` database, applies the core schema, and creates a local `.env` that
+is ignored by git.
+
+Run the full localhost app:
 
 ```bash
-apps/api/.venv/bin/uvicorn wr3_api.main:app --app-dir apps/api --reload --host 127.0.0.1 --port 8001
+npm run dev:local
 ```
 
-Run the web app:
+Or run API/web in split terminals:
 
 ```bash
+npm run dev:api
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8001 npm run dev:web
 ```
 
