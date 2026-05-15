@@ -20,6 +20,14 @@ async def create_disclosure_case(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
 
+@router.get("")
+async def list_disclosure_cases(actor: AuthContext = Depends(get_optional_auth)):
+    try:
+        return service.list_disclosure_cases(actor)
+    except AuditAccessDenied as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+
 @router.get("/{case_id}")
 async def get_disclosure_case(
     case_id: str,

@@ -9,7 +9,9 @@ possible, and use pay-as-you-earn providers only after revenue exists.
 
 Use free fixed-cost infrastructure first:
 
-- Cloudflare Free: DNS, Worker edge facade, D1 light metadata, R2 artifacts.
+- Cloudflare Free: DNS, Worker edge facade, D1 light metadata. R2 has included
+  free monthly usage, but the Dashboard can require a billing/payment method, so
+  wr3 treats R2 as optional until an adult/billing-enabled account exists.
 - Oracle Cloud Always Free: main VM, Postgres 17, Redis, Celery, pgvector.
 - GitHub public repo: CI, secret scanning alerts, dependency checks.
 - Doppler Developer Free or OCI Vault free secrets.
@@ -23,7 +25,8 @@ Use free fixed-cost infrastructure first:
 | TЗ area | Free source | Current free/near-free value | wr3 use | Risk / limit |
 | --- | --- | --- | --- | --- |
 | Cloudflare edge | Cloudflare Workers Free | 100k Worker requests/day; D1 Free has 5M rows read/day, 100k rows written/day, 5GB storage | Public edge facade, D1 cache/metadata | Avoid private source/findings at edge |
-| Artifact storage | Cloudflare R2 Free | 10GB-month, 1M Class A ops, 10M Class B ops, free egress | encrypted reports/raw outputs/backups | Standard storage only; watch op counts |
+| Artifact storage | Local encrypted filesystem | $0, no external account | localhost/private MVP reports/raw outputs/backups | Manual off-device copy needed for disaster recovery |
+| Artifact storage later | Cloudflare R2 included usage | 10GB-month, 1M Class A ops, 10M Class B ops, free egress | encrypted reports/raw outputs/backups | Requires billing/payment method in Dashboard; watch op counts |
 | Main VM | Oracle Always Free Ampere A1 | 4 OCPU + 24GB RAM total, 200GB block volume | FastAPI, Postgres, Redis, Celery | Capacity can be unavailable; keep Hetzner fallback |
 | Object fallback | Oracle Object Storage Always Free | 20GB object/archive storage, 50k API requests/month | backup fallback if R2 unavailable | Home-region only; request limits |
 | Secrets | Doppler Developer Free | Free for 3 users; service tokens and CLI | local/prod secrets | 3 days activity logs only |
@@ -53,7 +56,8 @@ Use free fixed-cost infrastructure first:
 These are free accounts/tokens, but I cannot create them from inside the local
 repo:
 
-1. Cloudflare account and R2/D1 resources.
+1. Cloudflare account and D1 resources. R2 is optional until a billing-enabled
+   account exists.
 2. Oracle Cloud Free Tier account and Always Free VM.
 3. Doppler account or OCI Vault choice.
 4. Sentry Developer project.
@@ -79,7 +83,8 @@ Variable costs:
 - Do not put private findings/source/PoC in D1, public logs, analytics, or
   non-ZDR prompts.
 - Keep free scans in degraded/static mode when quotas are exceeded.
-- Use R2 lifecycle/retention and encrypted object writes before paid launch.
+- Use encrypted local backups in free-only mode. Use R2/OCI Object Storage
+  lifecycle/retention and encrypted object writes before paid public launch.
 - Do not publish legal claims based on templates; paid legal review remains a
   launch blocker.
 

@@ -38,7 +38,7 @@ export default async function PublicProjectPage({
       <section className="panel public-score-panel">
         <div>
           <p className="eyebrow">Оценка риска</p>
-          {score === null ? <h2>Публичного wr3 score пока нет</h2> : <RiskBadge score={score} />}
+          {score === null ? <h2>Публичной wr3-оценки пока нет</h2> : <RiskBadge score={score} />}
         </div>
         <div className="safe-harbor-signal">
           <HarborIcon aria-hidden="true" size={21} />
@@ -50,7 +50,7 @@ export default async function PublicProjectPage({
         <div className="section-heading">
           <div>
             <p className="eyebrow">Публичные находки</p>
-            <h2>Редактированные disclosure-safe items</h2>
+            <h2>Публичные элементы без приватных деталей</h2>
           </div>
           <span>{project.public_findings.length} шт.</span>
         </div>
@@ -61,7 +61,7 @@ export default async function PublicProjectPage({
         <div className="section-heading">
           <div>
             <p className="eyebrow">Ограничения</p>
-            <h2>Публичные safety gates</h2>
+            <h2>Публичные ограничения безопасности</h2>
           </div>
         </div>
         <ul>

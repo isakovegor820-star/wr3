@@ -32,6 +32,8 @@ class DisclosureRepository(Protocol):
 
     def get(self, case_id: str) -> DisclosureCase | None: ...
 
+    def list_cases(self) -> list[DisclosureCase]: ...
+
 
 class InMemoryAuditRepository:
     def __init__(self) -> None:
@@ -59,6 +61,9 @@ class InMemoryDisclosureRepository:
 
     def get(self, case_id: str) -> DisclosureCase | None:
         return self._cases.get(case_id)
+
+    def list_cases(self) -> list[DisclosureCase]:
+        return sorted(self._cases.values(), key=lambda case: case.created_at, reverse=True)
 
 
 class PostgresAuditRepository:
@@ -217,6 +222,11 @@ class PostgresDisclosureRepository:
         if row is None:
             return None
         return DisclosureCase.model_validate(row[0])
+
+    def list_cases(self) -> list[DisclosureCase]:
+        with psycopg.connect(self._database_url) as conn:
+            rows = conn.execute("select payload from disclosure_cases order by updated_at desc").fetchall()
+        return [DisclosureCase.model_validate(row[0]) for row in rows]
 
     def _ensure_schema(self) -> None:
         with psycopg.connect(self._database_url) as conn:

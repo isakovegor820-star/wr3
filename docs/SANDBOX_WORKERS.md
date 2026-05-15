@@ -41,10 +41,43 @@ Medusa and ItyFuzz run only for deep Team/Pro jobs. Timeouts and resource limits
 must be set per worker. Counterexamples are sensitive artifacts and private by
 default.
 
+Current tool policy:
+
+```text
+infra/sandbox/tool-policy.json
+```
+
+ItyFuzz is optional for closed beta until a trusted binary, patched upstream
+build, or pinned sandbox image exists. Missing ItyFuzz must create a
+`skipped_optional` artifact, not a fake result.
+
 ## Verification Before Closed Beta
 
-- [ ] Sandbox cannot connect to primary Postgres.
-- [ ] Sandbox cannot read app secrets.
-- [ ] Sandbox egress blocks non-allowlisted hosts.
-- [ ] `--ffi`, shell metacharacters, and path escapes are rejected.
+Run the local evidence check:
+
+```bash
+npm run sandbox:evidence
+npm run sandbox:container:evidence
+```
+
+Current local artifact:
+
+```text
+artifacts/readiness/sandbox_evidence_20260515T084422Z.md
+```
+
+Current local result: 9 passed, 0 failed.
+
+- [x] Worker entrypoint refuses `WR3_DATABASE_URL`.
+- [x] Worker entrypoint refuses secret-manager tokens.
+- [x] Command policy rejects shell metacharacters.
+- [x] Command policy rejects `curl` style network tooling.
+- [x] Command policy rejects private-key flags.
+- [x] Allowlisted fork RPC host is accepted.
+- [x] Non-allowlisted fork RPC host is rejected.
+- [ ] Real container/VM egress test completed on staging.
 - [ ] Artifact manifests contain no raw source unless encrypted.
+
+The checked boxes above are localhost evidence only. Before public launch, repeat
+the egress and DB-write isolation checks inside the actual sandbox worker image
+or VM.

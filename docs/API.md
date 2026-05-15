@@ -46,6 +46,18 @@ Liveness endpoint for uptime probes.
 Readiness endpoint with non-secret component posture: storage mode, task backend,
 artifact encryption status, and LLM provider.
 
+`GET /v1/integrations/status`
+
+Returns sanitized free/API-provider posture for audit ingestion, RPC, Telegram,
+LLM, RAG, billing, monitoring, Solana, and roadmap providers. This endpoint
+lists env var names and public fallback status, but never returns token values.
+
+`GET /v1/news/hacks?limit=25`
+
+Fetches public DeFiLlama hack metadata without a key and normalizes it for the
+news/security-intelligence pipeline. This is public incident data only, not
+private customer findings.
+
 `POST /v1/auth/siwe/nonce`
 
 Creates a SIWE nonce and message.

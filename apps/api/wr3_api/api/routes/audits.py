@@ -4,6 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from fastapi.responses import JSONResponse
 
 from wr3_api.api.dependencies import get_optional_auth
+from wr3_api.domain.enums import AuditState, Chain, Severity
 from wr3_api.domain.schemas import CreateAuditRequest, CreateAuditResponse, FindingReviewRequest
 from wr3_api.services.audit_service import AuditAccessDenied, AuditNotFound, AuditService
 from wr3_api.services.auth import AuditAccessContext, AuthContext
@@ -49,6 +50,24 @@ async def create_audit(
         owner_access_token=record.owner_access_token,
         public_report_token=record.public_report_token,
     )
+
+
+@router.get("")
+async def list_audits(
+    chain: Chain | None = Query(default=None),
+    state: AuditState | None = Query(default=None),
+    severity: Severity | None = Query(default=None),
+    actor: AuthContext = Depends(get_optional_auth),
+):
+    try:
+        return service.list_audits_for_dashboard(
+            chain=chain,
+            state=state,
+            severity=severity,
+            actor=actor,
+        )
+    except AuditAccessDenied as exc:
+        raise _access_denied(exc) from exc
 
 
 @router.get("/{audit_id}")

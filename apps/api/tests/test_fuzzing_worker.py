@@ -30,6 +30,7 @@ async def test_deep_team_audit_records_fuzzing_worker_result():
         "fuzzing_binaries_missing",
         "fuzzing_generation_stub_requires_invariant_sandbox",
     }
+    assert fuzz_runs[0].artifact_uri is not None or "fuzzing_status_artifact_requires_encryption" in record.limitations
     assert any(event.event_type == "fuzzing_worker_result" for event in record.events)
 
 

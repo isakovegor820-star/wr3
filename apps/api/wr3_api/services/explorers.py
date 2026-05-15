@@ -96,51 +96,131 @@ class EtherscanFamilySourcePuller(ExplorerSourcePuller):
         else:
             return ExplorerSourceResult(status="failed", reason=last_error or f"{label}_unknown_http_error")
 
-        try:
-            payload = response.json()
-        except ValueError:
-            return ExplorerSourceResult(status="failed", reason=f"{label}_invalid_json")
-        result = payload.get("result")
-        if not isinstance(result, list) or not result:
-            return ExplorerSourceResult(status="missing", reason=f"{label}_no_source_result")
-        first = result[0]
-        source_code = unescape(str(first.get("SourceCode") or "")).strip()
-        if not source_code:
-            return ExplorerSourceResult(status="missing", reason=f"{label}_source_not_verified")
-        contract_name = str(first.get("ContractName") or "Contract")
-        file_name = "Contract.sol"
-        metadata = {
-            key: first.get(key)
-            for key in (
-                "CompilerVersion",
-                "OptimizationUsed",
-                "Runs",
-                "ConstructorArguments",
-                "EVMVersion",
-                "LicenseType",
-                "Proxy",
-                "Implementation",
-                "SwarmSource",
-            )
-            if first.get(key) not in {None, ""}
-        }
-        return ExplorerSourceResult(
-            status="verified",
-            source=_unwrap_explorer_source(source_code),
-            contract_name=contract_name,
-            file_name=file_name,
-            explorer_url=f"{label}:{address}",
-            verified_at=datetime.now(UTC),
-            metadata=metadata,
-        )
+        return parse_etherscan_source_payload(response, label=label, address=address)
 
     async def _sleep_before_retry(self) -> None:
         if self._settings.explorer_retry_backoff_seconds > 0:
             await asyncio.sleep(self._settings.explorer_retry_backoff_seconds)
 
 
+class EtherscanV2SourcePuller(ExplorerSourcePuller):
+    name = "etherscan_v2"
+
+    chain_ids: dict[Chain, str] = {
+        Chain.ETHEREUM: "1",
+        Chain.BASE: "8453",
+        Chain.BSC: "56",
+        Chain.ARBITRUM: "42161",
+    }
+
+    def __init__(self, settings: Settings | None = None, transport: httpx.AsyncBaseTransport | None = None) -> None:
+        self._settings = settings or get_settings()
+        self._transport = transport
+
+    def supports(self, chain: Chain) -> bool:
+        return chain in self.chain_ids
+
+    async def pull(self, *, chain: Chain, address: str) -> ExplorerSourceResult:
+        if not self._settings.etherscan_v2_enabled:
+            return ExplorerSourceResult(status="disabled", reason="etherscan_v2_disabled")
+        if chain not in self.chain_ids:
+            return ExplorerSourceResult(status="unsupported", reason=f"{chain} not supported by etherscan_v2")
+        if not self._settings.etherscan_api_key:
+            return ExplorerSourceResult(status="missing", reason="etherscan_v2_api_key_missing")
+
+        params = {
+            "chainid": self.chain_ids[chain],
+            "module": "contract",
+            "action": "getsourcecode",
+            "address": address,
+            "apikey": self._settings.etherscan_api_key,
+        }
+        last_error: str | None = None
+        max_attempts = max(1, self._settings.explorer_max_retries + 1)
+        label = f"etherscan_v2:{chain}"
+        for attempt in range(max_attempts):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self._settings.explorer_timeout_seconds,
+                    transport=self._transport,
+                ) as client:
+                    response = await client.get(self._settings.etherscan_v2_base_url, params=params)
+                    if response.status_code in {429, 500, 502, 503, 504}:
+                        last_error = f"{label}_retryable_status:{response.status_code}"
+                        if attempt < max_attempts - 1:
+                            await self._sleep_before_retry()
+                            continue
+                    response.raise_for_status()
+                    break
+            except httpx.TimeoutException:
+                last_error = f"{label}_timeout"
+                if attempt < max_attempts - 1:
+                    await self._sleep_before_retry()
+                    continue
+                return ExplorerSourceResult(status="rate_limited", reason=last_error)
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
+                if status_code == 429:
+                    return ExplorerSourceResult(status="rate_limited", reason=last_error or f"{label}_rate_limited")
+                return ExplorerSourceResult(status="failed", reason=f"{label}_http_status:{status_code}")
+            except httpx.HTTPError as exc:
+                return ExplorerSourceResult(status="failed", reason=f"{label}_http_error:{exc.__class__.__name__}")
+        else:
+            return ExplorerSourceResult(status="failed", reason=last_error or f"{label}_unknown_http_error")
+        return parse_etherscan_source_payload(response, label=label, address=address)
+
+    async def _sleep_before_retry(self) -> None:
+        if self._settings.explorer_retry_backoff_seconds > 0:
+            await asyncio.sleep(self._settings.explorer_retry_backoff_seconds)
+
+
+def parse_etherscan_source_payload(response: httpx.Response, *, label: str, address: str) -> ExplorerSourceResult:
+    try:
+        payload = response.json()
+    except ValueError:
+        return ExplorerSourceResult(status="failed", reason=f"{label}_invalid_json")
+    result = payload.get("result")
+    if isinstance(result, str) and payload.get("status") == "0":
+        lowered = result.lower()
+        if "rate limit" in lowered or "max rate" in lowered:
+            return ExplorerSourceResult(status="rate_limited", reason=f"{label}_rate_limited")
+        return ExplorerSourceResult(status="missing", reason=f"{label}:{result[:120]}")
+    if not isinstance(result, list) or not result:
+        return ExplorerSourceResult(status="missing", reason=f"{label}_no_source_result")
+    first = result[0]
+    source_code = unescape(str(first.get("SourceCode") or "")).strip()
+    if not source_code:
+        return ExplorerSourceResult(status="missing", reason=f"{label}_source_not_verified")
+    contract_name = str(first.get("ContractName") or "Contract")
+    metadata = {
+        key: first.get(key)
+        for key in (
+            "CompilerVersion",
+            "OptimizationUsed",
+            "Runs",
+            "ConstructorArguments",
+            "EVMVersion",
+            "LicenseType",
+            "Proxy",
+            "Implementation",
+            "Admin",
+            "SwarmSource",
+        )
+        if first.get(key) not in {None, ""}
+    }
+    return ExplorerSourceResult(
+        status="verified",
+        source=_unwrap_explorer_source(source_code),
+        contract_name=contract_name,
+        file_name="Contract.sol",
+        explorer_url=f"{label}:{address}",
+        verified_at=datetime.now(UTC),
+        metadata=metadata,
+    )
+
+
 def default_explorer_pullers() -> list[ExplorerSourcePuller]:
-    return [EtherscanFamilySourcePuller()]
+    return [EtherscanV2SourcePuller(), EtherscanFamilySourcePuller()]
 
 
 def _unwrap_explorer_source(source_code: str) -> str:

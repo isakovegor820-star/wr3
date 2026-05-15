@@ -7,7 +7,7 @@ WR3_CORE_API_BASE = "https://api.wr3.example"
 
 [[d1_databases]]
 binding = "WR3_EDGE_DB"
-database_name = "wr3-edge-prod"
+database_name = "wr3-edge-metadata"
 database_id = "REPLACE_WITH_D1_DATABASE_ID"
 
 [[r2_buckets]]

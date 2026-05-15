@@ -1,6 +1,19 @@
 # Incident Response
 
-Status: closed beta draft. Requires tabletop exercise before public launch.
+Status: closed beta draft. A local tabletop artifact exists; a real staging/prod
+team drill is still required before public launch.
+
+Generate local tabletop evidence:
+
+```bash
+npm run incident:drill
+```
+
+Current local artifact:
+
+```text
+artifacts/readiness/incident_tabletop_20260515T084423Z.md
+```
 
 ## Severity Levels
 
@@ -53,3 +66,15 @@ Every SEV-0/SEV-1 requires:
 - What detected it.
 - Why controls failed.
 - Action items with owners and dates.
+
+## Public Launch Gate
+
+Before paid/public launch:
+
+- [ ] Run the tabletop with the actual staging/prod access team.
+- [ ] Confirm who can freeze deploys.
+- [ ] Confirm who can rotate artifact keys and provider tokens.
+- [ ] Confirm customer notification channel.
+- [ ] Confirm SEAL 911 escalation path for eligible cases.
+- [ ] Store only scrubbed incident evidence; no raw source, private findings, or
+  PoC content in the drill artifact.

@@ -24,12 +24,20 @@ async def test_standard_team_audit_records_foundry_poc_worker_result():
     assert record.state == "completed"
     poc_runs = [run for run in record.engine_runs if run.engine == "foundry_poc"]
     assert len(poc_runs) == 1
-    assert poc_runs[0].status == "skipped"
+    assert poc_runs[0].status in {"skipped", "attempted"}
     assert poc_runs[0].error in {
         "foundry_binary_missing",
         "poc_generation_stub_requires_zdr_llm_sandbox",
+        "poc_not_confirmed_after_retry_loop",
+        "poc_artifact_requires_encryption",
     }
+    assert poc_runs[0].artifact_uri is not None or "poc_status_artifact_requires_encryption" in record.limitations
     assert any(event.event_type == "poc_worker_result" for event in record.events)
+    assert not any(
+        event.payload.get("confirmed_finding_ids")
+        for event in record.events
+        if event.event_type == "poc_worker_result"
+    )
 
 
 @pytest.mark.asyncio

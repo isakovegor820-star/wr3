@@ -7,6 +7,7 @@ from wr3_api.domain.schemas import CreateAuditRequest
 from wr3_api.services.audit_service import AuditService
 from wr3_api.services.explorers import (
     EtherscanFamilySourcePuller,
+    EtherscanV2SourcePuller,
     ExplorerSourceResult,
     ExplorerSourcePuller,
     _unwrap_explorer_source,
@@ -99,3 +100,46 @@ async def test_etherscan_family_retries_transient_rate_limit():
     assert result.verified_at is not None
     assert result.metadata["CompilerVersion"] == "v0.8.20+commit.test"
     assert calls["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_etherscan_v2_uses_single_key_and_chainid():
+    seen = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen["params"] = dict(request.url.params)
+        return httpx.Response(
+            200,
+            json={
+                "status": "1",
+                "message": "OK",
+                "result": [
+                    {
+                        "SourceCode": "contract BaseContract {}",
+                        "ContractName": "BaseContract",
+                        "CompilerVersion": "v0.8.20+commit.test",
+                        "Proxy": "0",
+                    }
+                ],
+            },
+        )
+
+    settings = Settings(etherscan_api_key="v2-key", explorer_max_retries=0)
+    puller = EtherscanV2SourcePuller(settings=settings, transport=httpx.MockTransport(handler))
+
+    result = await puller.pull(chain=Chain.BASE, address="0x0000000000000000000000000000000000000000")
+
+    assert result.status == "verified"
+    assert result.source == "contract BaseContract {}"
+    assert seen["params"]["chainid"] == "8453"
+    assert seen["params"]["apikey"] == "v2-key"
+
+
+@pytest.mark.asyncio
+async def test_etherscan_v2_missing_key_is_nonfatal():
+    puller = EtherscanV2SourcePuller(settings=Settings(etherscan_api_key=None))
+
+    result = await puller.pull(chain=Chain.ETHEREUM, address="0x0000000000000000000000000000000000000000")
+
+    assert result.status == "missing"
+    assert result.reason == "etherscan_v2_api_key_missing"

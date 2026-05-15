@@ -18,7 +18,7 @@ export function ReportTabs({ audit, findings }: { audit: AuditSummary; findings:
           Находки
         </button>
         <button type="button" className={tab === "score" ? "tab tab-active" : "tab"} onClick={() => setTab("score")}>
-          Разбор score
+          Разбор оценки
         </button>
         <button type="button" className={tab === "raw" ? "tab tab-active" : "tab"} onClick={() => setTab("raw")}>
           Сырые выводы
@@ -42,7 +42,7 @@ export function ReportTabs({ audit, findings }: { audit: AuditSummary; findings:
         <div className="score-tab">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Скоринг</p>
+              <p className="eyebrow">Оценка риска</p>
               <h2>Прозрачный разбор по пяти осям</h2>
             </div>
           </div>
@@ -65,7 +65,7 @@ export function ReportTabs({ audit, findings }: { audit: AuditSummary; findings:
                 <dd>{audit.score.team_kyc_score} · 15%</dd>
               </div>
               <div>
-                <dt>On-chain поведение</dt>
+                <dt>Поведение в сети</dt>
                 <dd>{audit.score.behavior_score} · 15%</dd>
               </div>
               <div>
@@ -74,15 +74,15 @@ export function ReportTabs({ audit, findings }: { audit: AuditSummary; findings:
               </div>
               <div>
                 <dt>Источник кода</dt>
-                <dd>{audit.source_metadata.bytecode_only ? "bytecode-only limited" : audit.source_metadata.source_origin}</dd>
+                <dd>{audit.source_metadata.bytecode_only ? "ограниченный bytecode-режим" : audit.source_metadata.source_origin}</dd>
               </div>
               <div>
-                <dt>Proxy</dt>
-                <dd>{audit.source_metadata.proxy_info.is_proxy ? audit.source_metadata.proxy_info.proxy_type || "detected" : "не обнаружен"}</dd>
+                <dt>Прокси</dt>
+                <dd>{audit.source_metadata.proxy_info.is_proxy ? audit.source_metadata.proxy_info.proxy_type || "обнаружен" : "не обнаружен"}</dd>
               </div>
             </dl>
           ) : (
-            <p className="empty-state">Score ещё считается.</p>
+            <p className="empty-state">Оценка ещё считается.</p>
           )}
         </div>
       ) : null}
@@ -91,15 +91,15 @@ export function ReportTabs({ audit, findings }: { audit: AuditSummary; findings:
         <div className="raw-gated">
           <LockKeyhole aria-hidden="true" size={24} />
           <div>
-            <p className="eyebrow">{audit.access.is_owner ? "Owner подтверждён" : "Доступ закрыт"}</p>
+            <p className="eyebrow">{audit.access.is_owner ? "Владелец подтверждён" : "Доступ закрыт"}</p>
             <h2>
               {audit.access.can_view_raw_outputs
-                ? "Owner может запросить сырые метаданные."
-                : "Сырые выводы движков требуют платный owner-доступ."}
+                ? "Владелец может запросить сырые метаданные."
+                : "Сырые выводы движков требуют платный доступ владельца."}
             </h2>
             <p>
               В MVP этот блок намеренно показывает только метаданные. Приватный исходный код,
-              находки, PoC traces и сырой вывод инструментов должны оставаться зашифрованными и закрытыми для владельца.
+              находки, PoC-трейсы и сырой вывод инструментов должны оставаться зашифрованными и закрытыми для владельца.
             </p>
           </div>
         </div>

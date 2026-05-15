@@ -24,7 +24,7 @@ def test_one_shot_packages_are_public_and_disclaimer_safe():
         "poc_report",
         "deep_ai_assisted_audit",
     }
-    assert any("No active mainnet actions" in limitation for limitation in packages[0]["limitations"])
+    assert any("Без активных действий в mainnet" in limitation for limitation in packages[0]["limitations"])
 
 
 def test_manual_usdc_intent_requires_authenticated_user():

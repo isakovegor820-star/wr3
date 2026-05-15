@@ -34,14 +34,14 @@ class HeuristicSolanaAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="Unchecked Solana account requires owner and signer validation",
+                    summary="Unchecked Solana account требует проверки owner и signer",
                     category="solana_account_validation",
                     severity=Severity.MEDIUM,
                     confidence=0.66,
                     exploitability=Exploitability.UNKNOWN,
-                    trace="UncheckedAccount or AccountInfo usage detected",
-                    impact="Unvalidated accounts can let callers substitute attacker-controlled accounts.",
-                    recommendation="Validate owner, signer, mutability, and expected PDA seeds for every unchecked account.",
+                    trace="Обнаружено использование UncheckedAccount или AccountInfo",
+                    impact="Невалидированные аккаунты позволяют подставить account под контролем атакующего.",
+                    recommendation="Проверяйте owner, signer, mutability и ожидаемые PDA seeds для каждого unchecked account.",
                 )
             )
 
@@ -54,14 +54,14 @@ class HeuristicSolanaAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="Authority account is not typed as a Signer",
+                    summary="Authority account не типизирован как Signer",
                     category="solana_signer",
                     severity=Severity.MEDIUM,
                     confidence=0.68,
                     exploitability=Exploitability.UNKNOWN,
-                    trace="authority/admin/owner AccountInfo detected without a Signer typed constraint",
-                    impact="A missing signer constraint can let callers route privileged instructions through an arbitrary account.",
-                    recommendation="Use Signer<'info> for authorities or explicitly check is_signer before privileged actions.",
+                    trace="authority/admin/owner AccountInfo обнаружен без typed constraint Signer",
+                    impact="Отсутствующий signer constraint может позволить вызвать privileged instructions через произвольный account.",
+                    recommendation="Используйте Signer<'info> для authorities или явно проверяйте is_signer перед привилегированными действиями.",
                 )
             )
 
@@ -74,14 +74,14 @@ class HeuristicSolanaAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="PDA-like account lacks explicit seed constraints",
+                    summary="PDA-like account без явных seed constraints",
                     category="solana_pda",
                     severity=Severity.LOW,
                     confidence=0.54,
                     exploitability=Exploitability.THEORETICAL,
-                    trace="mutable config/vault/PDA-like account detected without obvious seeds constraint",
-                    impact="Missing seed or owner checks can allow account substitution in Anchor programs.",
-                    recommendation="Add #[account(seeds = [...], bump)] or equivalent owner/address constraints.",
+                    trace="mutable config/vault/PDA-like account обнаружен без очевидного seeds constraint",
+                    impact="Отсутствующие seed или owner checks могут позволить подмену account в Anchor programs.",
+                    recommendation="Добавьте #[account(seeds = [...], bump)] или эквивалентные owner/address constraints.",
                 )
             )
 
@@ -90,14 +90,14 @@ class HeuristicSolanaAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="init_if_needed can enable account reinitialization footguns",
+                    summary="init_if_needed может привести к ошибкам reinitialization",
                     category="solana_accounting",
                     severity=Severity.MEDIUM,
                     confidence=0.62,
                     exploitability=Exploitability.THEORETICAL,
-                    trace="init_if_needed constraint detected",
-                    impact="Reinitialization mistakes can reset state or bypass intended one-time setup.",
-                    recommendation="Add explicit initialization state checks and document why init_if_needed is required.",
+                    trace="Обнаружен constraint init_if_needed",
+                    impact="Ошибки reinitialization могут сбросить state или обойти одноразовую инициализацию.",
+                    recommendation="Добавьте явные проверки состояния инициализации и объясните, зачем нужен init_if_needed.",
                 )
             )
 
@@ -106,14 +106,14 @@ class HeuristicSolanaAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="Signed CPI path needs explicit PDA seed review",
+                    summary="Signed CPI требует явного ревью PDA seeds",
                     category="solana_pda",
                     severity=Severity.LOW,
                     confidence=0.45,
                     exploitability=Exploitability.UNKNOWN,
-                    trace="invoke_signed detected without obvious seed constraints in source slice",
-                    impact="Incorrect PDA seed validation can authorize unintended program actions.",
-                    recommendation="Ensure PDA seeds, bumps, and account constraints are explicit and tested.",
+                    trace="Обнаружен invoke_signed без очевидных seed constraints в данном фрагменте кода",
+                    impact="Неверная проверка PDA seeds может авторизовать нежелательные действия программы.",
+                    recommendation="Убедитесь, что PDA seeds, bumps и account constraints явные и покрыты тестами.",
                 )
             )
 
@@ -122,14 +122,14 @@ class HeuristicSolanaAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="No Solana heuristic findings detected",
+                    summary="Эвристический Solana-проход не нашёл находок",
                     category="informational",
                     severity=Severity.INFO,
                     confidence=0.82,
                     exploitability=Exploitability.UNKNOWN,
-                    trace="Solana heuristic scan completed",
-                    impact="This does not mean the program is safe; Solana beta coverage is intentionally limited.",
-                    recommendation="Run Anchor tests, Trident fuzzing, and human review before deployment.",
+                    trace="Эвристический Solana-скан завершён",
+                    impact="Это не означает, что программа безопасна; покрытие Solana beta намеренно ограничено.",
+                    recommendation="Перед деплоем запустите Anchor-тесты, Trident-фаззинг и ручное ревью.",
                 )
             )
 

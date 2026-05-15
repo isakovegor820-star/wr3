@@ -3,8 +3,8 @@ import { Check, Clock, Minus, X } from "lucide-react";
 
 const stages: { state: AuditState; label: string }[] = [
   { state: "ingesting", label: "Исходники" },
-  { state: "static_running", label: "Static-анализ" },
-  { state: "triage_running", label: "AI-триаж" },
+  { state: "static_running", label: "Статический анализ" },
+  { state: "triage_running", label: "ИИ-триаж" },
   { state: "poc_running", label: "PoC" },
   { state: "fuzzing_running", label: "Фаззинг" },
   { state: "scoring", label: "Скоринг" },

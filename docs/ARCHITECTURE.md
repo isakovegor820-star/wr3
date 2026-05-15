@@ -150,11 +150,13 @@ transactions.
 ## Explorer Source Pull
 
 The API includes an Etherscan-family source puller for Ethereum, Base, BSC, and
-Arbitrum. Configure `WR3_ETHERSCAN_API_KEY`, `WR3_BASESCAN_API_KEY`,
-`WR3_BSCSCAN_API_KEY`, and `WR3_ARBISCAN_API_KEY`. If no key is present, audits
-return `needs_source` with an upload-source limitation instead of blocking.
-Standard-json source payloads from Etherscan-family explorers are unwrapped into
-file-marked source text for MVP analysis.
+Arbitrum. The primary path is Etherscan API V2: configure one free
+`WR3_ETHERSCAN_API_KEY`, and wr3 selects the target network with `chainid`
+(`1`, `8453`, `56`, `42161`). `WR3_BASESCAN_API_KEY`, `WR3_BSCSCAN_API_KEY`,
+and `WR3_ARBISCAN_API_KEY` remain optional legacy fallbacks only. If no key is
+present, audits return `needs_source` with an upload-source limitation instead
+of blocking. Standard-json source payloads from Etherscan-family explorers are
+unwrapped into file-marked source text for MVP analysis.
 
 ## Production Target
 

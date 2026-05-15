@@ -36,14 +36,14 @@ class HeuristicEvmAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="Authorization depends on tx.origin",
+                    summary="Авторизация зависит от tx.origin",
                     category="access_control",
                     severity=Severity.HIGH,
                     confidence=0.82,
                     exploitability=Exploitability.LIKELY,
-                    trace="tx.origin usage detected",
-                    impact="Phishing flows can pass authorization through an intermediate caller.",
-                    recommendation="Use msg.sender based authorization and explicit role checks.",
+                    trace="Обнаружено использование tx.origin",
+                    impact="Фишинговый сценарий может пройти авторизацию через промежуточный контракт.",
+                    recommendation="Используйте авторизацию через msg.sender и явные проверки ролей.",
                 )
             )
 
@@ -52,14 +52,14 @@ class HeuristicEvmAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="Delegatecall requires strict target control",
+                    summary="Delegatecall требует строгого контроля target-адреса",
                     category="upgradeability",
                     severity=Severity.HIGH,
                     confidence=0.72,
                     exploitability=Exploitability.THEORETICAL,
-                    trace="delegatecall usage detected",
-                    impact="A controlled or unvalidated delegatecall target can modify caller storage.",
-                    recommendation="Restrict delegatecall targets and validate implementation code hashes.",
+                    trace="Обнаружено использование delegatecall",
+                    impact="Контролируемый или непроверенный delegatecall target может менять storage вызывающего контракта.",
+                    recommendation="Ограничьте delegatecall targets и проверяйте хэши кода implementation.",
                 )
             )
 
@@ -68,14 +68,14 @@ class HeuristicEvmAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="Low-level value transfer needs reentrancy review",
+                    summary="Low-level value transfer требует проверки reentrancy",
                     category="reentrancy",
                     severity=Severity.MEDIUM,
                     confidence=0.68,
                     exploitability=Exploitability.UNKNOWN,
-                    trace="low-level call with value pattern detected",
-                    impact="External calls before state updates can enable reentrant accounting bugs.",
-                    recommendation="Use checks-effects-interactions and a reentrancy guard where appropriate.",
+                    trace="Обнаружен low-level call с value",
+                    impact="Внешние вызовы до обновления состояния могут открыть reentrancy-баги в учёте.",
+                    recommendation="Используйте checks-effects-interactions и reentrancy guard там, где это уместно.",
                 )
             )
 
@@ -84,14 +84,14 @@ class HeuristicEvmAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="Selfdestruct path is present",
+                    summary="В коде есть selfdestruct-путь",
                     category="lifecycle",
                     severity=Severity.MEDIUM,
                     confidence=0.75,
                     exploitability=Exploitability.THEORETICAL,
-                    trace="selfdestruct usage detected",
-                    impact="Contract lifecycle controls may permanently remove code or alter assumptions.",
-                    recommendation="Remove selfdestruct unless it is explicitly required and access-controlled.",
+                    trace="Обнаружено использование selfdestruct",
+                    impact="Контроль жизненного цикла может навсегда удалить код или изменить системные предположения.",
+                    recommendation="Удалите selfdestruct, если он явно не нужен и не закрыт access-control.",
                 )
             )
 
@@ -105,14 +105,14 @@ class HeuristicEvmAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="Privileged-looking function lacks an obvious access guard",
+                    summary="Привилегированная функция без очевидной проверки доступа",
                     category="access_control",
                     severity=Severity.MEDIUM,
                     confidence=0.58,
                     exploitability=Exploitability.THEORETICAL,
-                    trace=f"{privileged_function.group(1)} function detected without common owner/role guard tokens",
-                    impact="An unrestricted privileged function can let arbitrary callers mint, sweep, or change critical configuration.",
-                    recommendation="Add explicit role checks, owner checks, or document why the function is intentionally permissionless.",
+                    trace=f"Функция {privileged_function.group(1)} обнаружена без типовых owner/role guard tokens",
+                    impact="Неограниченная привилегированная функция может позволить любому caller mint, sweep или менять критичную конфигурацию.",
+                    recommendation="Добавьте явные role/owner checks или задокументируйте, почему функция намеренно permissionless.",
                 )
             )
 
@@ -121,14 +121,14 @@ class HeuristicEvmAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="Owner-controlled mint path affects token centralization",
+                    summary="Mint под контролем владельца влияет на централизацию",
                     category="centralization",
                     severity=Severity.LOW,
                     confidence=0.76,
                     exploitability=Exploitability.UNKNOWN,
-                    trace="onlyOwner mint function pattern detected",
-                    impact="A privileged owner may be able to change supply assumptions.",
-                    recommendation="Document mint limits, use multisig ownership, or add immutable caps.",
+                    trace="Обнаружен паттерн onlyOwner mint",
+                    impact="Привилегированный владелец может менять предположения о supply.",
+                    recommendation="Задокументируйте лимиты mint, используйте multisig или добавьте неизменяемые caps.",
                 )
             )
 
@@ -137,14 +137,14 @@ class HeuristicEvmAdapter(EngineAdapter):
                 self._finding(
                     source,
                     audit_id,
-                    summary="No heuristic findings detected",
+                    summary="Эвристический проход не нашёл находок",
                     category="informational",
                     severity=Severity.INFO,
                     confidence=0.9,
                     exploitability=Exploitability.UNKNOWN,
-                    trace="heuristic scan completed",
-                    impact="This does not mean the contract is safe; only that this MVP pass found no known pattern.",
-                    recommendation="Run full static analysis, LLM triage, and human review before launch.",
+                    trace="Эвристический скан завершён",
+                    impact="Это не означает, что контракт безопасен; MVP-проход просто не нашёл известный паттерн.",
+                    recommendation="Перед запуском проведите полный статический анализ, ИИ-триаж и ручное ревью.",
                 )
             )
 

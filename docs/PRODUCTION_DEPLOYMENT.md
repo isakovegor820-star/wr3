@@ -8,11 +8,18 @@ still requires legal review and a real security pass.
 - Cloudflare: DNS, optional Worker edge facade, D1 for light edge metadata, R2
   for encrypted artifacts and backups.
 - Oracle Always Free VM: FastAPI, Celery workers, Postgres 17, pgvector, Redis.
-- Sandbox worker host/container: Foundry, Anvil, Medusa, ItyFuzz, Trident, no
-  primary DB credentials, egress restricted to allowed fork RPC hosts.
+- Sandbox worker host/container: Foundry, Anvil, Medusa, Trident, optional
+  ItyFuzz, no primary DB credentials, egress restricted to allowed fork RPC
+  hosts.
 - Hetzner fallback: standby VM that can restore encrypted backup within 24h.
 
 ## VM Baseline
+
+Before touching a real VM, generate local preflight evidence:
+
+```bash
+npm run staging:preflight
+```
 
 ```bash
 sudo apt-get update
@@ -96,8 +103,8 @@ Minimum R2 buckets:
 
 Minimum D1 databases:
 
-- `wr3-edge-prod`: edge session/cache metadata only. Do not store private source,
-  findings, PoC traces, prompts, or reports in D1.
+- `wr3-edge-metadata`: edge session/cache metadata only. Do not store private
+  source, findings, PoC traces, prompts, or reports in D1.
 
 Cloudflare Worker route is optional in closed beta. If used, it should proxy only
 public API traffic and reject raw artifacts or private finding bodies.
@@ -106,6 +113,36 @@ Template files:
 
 - `infra/cloudflare/wrangler.toml.example`
 - `infra/cloudflare/worker.ts`
+
+Local setup helper:
+
+```bash
+npm run cloudflare:setup-storage
+```
+
+This command creates/ verifies the R2 buckets and D1 database through Wrangler
+when `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are configured. In a
+non-interactive terminal Wrangler will not use the browser dashboard session;
+it requires a scoped API token.
+
+If Wrangler returns Cloudflare API code `10042`, R2 is not enabled for the
+account yet. Open Cloudflare Dashboard -> Storage & databases -> R2 Object
+Storage, enable R2, then rerun `npm run cloudflare:setup-storage`.
+
+Minimum Cloudflare environment:
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=...
+CLOUDFLARE_API_TOKEN=...
+AWS_ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_DEFAULT_REGION=auto
+WR3_BACKUP_R2_URI=s3://wr3-prod-backups/postgres
+```
+
+Use a scoped Cloudflare API token for bucket/D1 setup and scoped R2 S3 access
+keys for backup upload. Do not store private findings/source/PoC in D1.
 
 ## Backup And Restore
 
@@ -143,6 +180,8 @@ The Hetzner fallback plan is:
 
 - [ ] Branch protection and signed commits enabled.
 - [ ] Doppler/1Password secret flow configured.
+- [ ] `npm run secrets:readiness` artifact generated.
+- [ ] `npm run staging:preflight` artifact generated.
 - [ ] `WR3_ARTIFACT_ENCRYPTION_KEY` generated and stored outside git.
 - [ ] Postgres schema applied.
 - [ ] pgvector schema applied if RAG is enabled.
@@ -150,6 +189,8 @@ The Hetzner fallback plan is:
 - [ ] Backup uploaded to R2 and restore drill timed.
 - [ ] Sandbox worker cannot reach primary DB.
 - [ ] Sandbox egress blocked except configured RPC hosts.
+- [ ] `npm run sandbox:container:evidence` run on the sandbox host or local
+  Docker environment.
 - [ ] UptimeRobot/Sentry/Telegram alerts configured.
 - [ ] `npm run check` passes.
 - [ ] Benchmark subset artifact generated.

@@ -23,8 +23,9 @@ python3 -m venv apps/api/.venv
 apps/api/.venv/bin/python -m pip install -e "apps/api[dev,worker,secure]"
 npm run setup:native
 npm run local:readiness
+npm run site:smoke
 npm run check
-npm run benchmark:mvp
+npm run benchmark:local
 ```
 
 `npm run setup:native` installs/starts Homebrew PostgreSQL and Redis when they
@@ -67,7 +68,30 @@ npm run local:readiness
 
 The readiness command checks `.env`, Node dependencies, API venv, Redis,
 Postgres connectivity, core schema tables, optional pgvector, artifact storage,
-and whether the API/web ports are currently open.
+tool-status API, benchmark fixtures, safe local scan flow, key web routes, and
+the local PoC/fuzzing/benchmark commands.
+
+```bash
+npm run site:smoke
+```
+
+The site smoke command drives the actual browser UI: token risk check, Bug
+Bounty safe scan, Mini App scan/Bounty, dashboard, tools, integrations,
+disclosure, billing, and Telegram emulator. It writes screenshots and a JSON
+report to `artifacts/site-smoke/`.
+
+See also:
+
+- `docs/LOCAL_MACBOOK_SETUP.md`
+- `docs/AUDIT_TOOLS_INSTALL.md`
+- `docs/POC_LOCAL_MODE.md`
+- `docs/FUZZING_LOCAL_MODE.md`
+- `docs/LOCAL_BENCHMARK.md`
+- `docs/TELEGRAM_MINI_APP.md`
+- `docs/TELEGRAM_EMULATOR.md`
+- `docs/BILLING_MOCK.md`
+- `docs/DISCLOSURE_UI.md`
+- `docs/LOCAL_READINESS.md`
 
 ## Adapter policy
 

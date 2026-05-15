@@ -1,0 +1,16 @@
+[
+  {
+    "id": "defihacklabs-style-reentrancy-call-value",
+    "chain": "ethereum",
+    "address": "0x000000000000000000000000000000000000d001",
+    "source": "contract Vault { mapping(address => uint256) public balanceOf; function withdraw(uint256 amount) external { require(balanceOf[msg.sender] >= amount); (bool ok,) = msg.sender.call{value: amount}(\"\"); require(ok); balanceOf[msg.sender] -= amount; } }",
+    "expected_categories": ["reentrancy"]
+  },
+  {
+    "id": "defihacklabs-style-unprotected-mint",
+    "chain": "bsc",
+    "address": "0x000000000000000000000000000000000000d002",
+    "source": "contract Token { mapping(address => uint256) public balanceOf; function mint(address to, uint256 amount) external { balanceOf[to] += amount; } }",
+    "expected_categories": ["access_control"]
+  }
+]

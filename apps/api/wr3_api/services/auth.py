@@ -74,11 +74,11 @@ class AuthService:
         nonce = secrets.token_urlsafe(18)
         expires_at = utc_now() + timedelta(minutes=10)
         message = (
-            "wr3 AI pre-audit sign-in\n"
-            f"Address: {request.address}\n"
-            f"Chain: {request.chain}\n"
+            "wr3 вход для ИИ-предаудита\n"
+            f"Адрес: {request.address}\n"
+            f"Сеть: {request.chain}\n"
             f"Nonce: {nonce}\n"
-            "Purpose: authenticate without authorizing transactions."
+            "Цель: подтвердить вход без разрешения транзакций."
         )
         self._nonces[nonce] = _Nonce(
             address=request.address.lower(),

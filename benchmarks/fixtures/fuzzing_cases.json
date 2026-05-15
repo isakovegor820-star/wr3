@@ -1,0 +1,11 @@
+[
+  {
+    "id": "local-fuzzing-accounting-shape",
+    "chain": "base",
+    "address": "0x0000000000000000000000000000000000003001",
+    "requested_depth": "deep",
+    "tier": "team",
+    "source": "pragma solidity ^0.8.20; contract LocalAccounting { uint256 public total; function deposit(uint256 amount) external { total += amount; } function withdraw(uint256 amount) external { total -= amount; } }",
+    "expected_statuses": ["skipped", "failed", "timeout", "confirmed"]
+  }
+]

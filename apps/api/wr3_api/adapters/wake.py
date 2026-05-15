@@ -2,23 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 import tempfile
 from pathlib import Path
 
 from wr3_api.adapters.base import EngineAdapter, EngineRunOptions, EngineRunResult, NormalizedSource, Timer
 from wr3_api.domain.enums import Chain, Exploitability, Severity
 from wr3_api.domain.schemas import ContractRef, Evidence, Finding, SourceLocation, Taxonomy
+from wr3_api.services.tool_paths import resolve_tool_binary
 
 
 class WakeAdapter(EngineAdapter):
     name = "wake"
 
     async def version(self) -> str:
-        if not shutil.which("wake"):
+        binary = resolve_tool_binary("wake")
+        if not binary:
             return "wake:not-installed"
         proc = await asyncio.create_subprocess_exec(
-            "wake",
+            binary,
             "--version",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -30,7 +31,8 @@ class WakeAdapter(EngineAdapter):
         return source.chain in {Chain.ETHEREUM, Chain.BASE, Chain.BSC, Chain.ARBITRUM}
 
     async def run(self, source: NormalizedSource, options: EngineRunOptions) -> EngineRunResult:
-        if not shutil.which("wake"):
+        binary = resolve_tool_binary("wake")
+        if not binary:
             return EngineRunResult(engine=self.name, status="skipped", error="wake binary not installed")
 
         with Timer() as timer:
@@ -39,7 +41,7 @@ class WakeAdapter(EngineAdapter):
                 src_dir.mkdir()
                 (src_dir / source.file_name).write_text(source.source, encoding="utf-8")
                 proc = await asyncio.create_subprocess_exec(
-                    "wake",
+                    binary,
                     "detect",
                     "--json",
                     cwd=temp_dir,

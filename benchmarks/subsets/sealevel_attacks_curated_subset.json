@@ -1,0 +1,357 @@
+{
+  "kind": "wr3_curated_benchmark_subset",
+  "created_at": "2026-05-15T09:05:42.693422+00:00",
+  "case_count": 35,
+  "cases": [
+    {
+      "id": "sealevel-0-signer-authorization-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/0-signer-authorization/insecure/src/lib.rs",
+      "content_hash": "04bf308f21faf405a1932ac9a6d7faaa8e03d09b2d2fa41f93b69b76a3914b37",
+      "category": "0-signer-authorization",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-0-signer-authorization-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/0-signer-authorization/recommended/src/lib.rs",
+      "content_hash": "122cdf6710550b0ef3af1e464bfbb63eb2368e4ebbbf637ff0a49572e44615e3",
+      "category": "0-signer-authorization",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-0-signer-authorization-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/0-signer-authorization/secure/src/lib.rs",
+      "content_hash": "5a4819c4f07296323b1f192ce8f703e07ce43d570c4f66f0310a835cb347ed8a",
+      "category": "0-signer-authorization",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-1-account-data-matching-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/1-account-data-matching/insecure/src/lib.rs",
+      "content_hash": "1093af1cc1014b43e93a6ea87baa27db18a8b0d3544f1f41b480f35492bbd1f6",
+      "category": "1-account-data-matching",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-1-account-data-matching-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/1-account-data-matching/recommended/src/lib.rs",
+      "content_hash": "6bbadb2dd4f5f7c319cb046060a06c0af911e6509826bc15da4a53897519cc23",
+      "category": "1-account-data-matching",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-1-account-data-matching-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/1-account-data-matching/secure/src/lib.rs",
+      "content_hash": "2523909e31d1773001d6e00d03496bcb5041fa4848deb9193e116046f5d561c2",
+      "category": "1-account-data-matching",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-10-sysvar-address-checking-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/10-sysvar-address-checking/insecure/src/lib.rs",
+      "content_hash": "df30de8aba0b5cebb525ad8e3b0ddeea1e771b80d9ab5b2043a1d134641e4cd9",
+      "category": "10-sysvar-address-checking",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-10-sysvar-address-checking-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/10-sysvar-address-checking/recommended/src/lib.rs",
+      "content_hash": "eea2079b30393ea81f25e8d1ce70945c97e5b2e72efa3bce5df43e5d7b60559f",
+      "category": "10-sysvar-address-checking",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-10-sysvar-address-checking-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/10-sysvar-address-checking/secure/src/lib.rs",
+      "content_hash": "0ecae4da86d6eaaf3de3cbd42c984d5f0127e826c5adb67eff6959e13e6310d4",
+      "category": "10-sysvar-address-checking",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-2-owner-checks-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/2-owner-checks/insecure/src/lib.rs",
+      "content_hash": "405253e49c878450266c8e89e864ff81801de1a7f2d12f51aa89d35f2f0d473d",
+      "category": "2-owner-checks",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-2-owner-checks-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/2-owner-checks/recommended/src/lib.rs",
+      "content_hash": "9be8d53a172d99a4ecea6aaa2cac7599ffed903269f5dbd6cc538dec51ce5da4",
+      "category": "2-owner-checks",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-2-owner-checks-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/2-owner-checks/secure/src/lib.rs",
+      "content_hash": "25264887bff7cd4fa3ef1ba25c369d494a9f68d355889112d02e9314ddbf3e08",
+      "category": "2-owner-checks",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-3-type-cosplay-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/3-type-cosplay/insecure/src/lib.rs",
+      "content_hash": "3667ceda861b77a9aff597d6be786057c40b2642ec7f15a384ef996f592f7ba4",
+      "category": "3-type-cosplay",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-3-type-cosplay-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/3-type-cosplay/recommended/src/lib.rs",
+      "content_hash": "7b4ee005739d4420114ffc0ead3016be8d7726a806d9dc0cb205939d5cadb07d",
+      "category": "3-type-cosplay",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-3-type-cosplay-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/3-type-cosplay/secure/src/lib.rs",
+      "content_hash": "97a73a4cc06815fef40a35690c6dbdc5fc1603e9c7476d76a449e9883461f5a0",
+      "category": "3-type-cosplay",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-4-initialization-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/4-initialization/insecure/src/lib.rs",
+      "content_hash": "aa52f4c64b5794e959ca37bcf297d7e90d313e87ae8e34a3e3d03863575c33f5",
+      "category": "4-initialization",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-4-initialization-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/4-initialization/recommended/src/lib.rs",
+      "content_hash": "33f427f641b1cc44700b59c856dd469419e0ede1cfd097e2d692395c54131508",
+      "category": "4-initialization",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-4-initialization-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/4-initialization/secure/src/lib.rs",
+      "content_hash": "d5b0d4d96cfcbda1dac6813f30d86c92a225d9c90199d7e01c3bb088027b1cd7",
+      "category": "4-initialization",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-5-arbitrary-cpi-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/5-arbitrary-cpi/insecure/src/lib.rs",
+      "content_hash": "9c25223cee10aee6e45f8f4bb7caf7eeda4d0d1e816e6cee784c61c044aa1260",
+      "category": "5-arbitrary-cpi",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-5-arbitrary-cpi-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/5-arbitrary-cpi/recommended/src/lib.rs",
+      "content_hash": "117f26253dc3fe2cc03659aad1395975a42f2f229fcd44027e4ca495534ac988",
+      "category": "5-arbitrary-cpi",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-5-arbitrary-cpi-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/5-arbitrary-cpi/secure/src/lib.rs",
+      "content_hash": "388dff7a6bc9e53f50b55b2e4ad4fd67aaa6b02ff92d62b0f225b266cbd95367",
+      "category": "5-arbitrary-cpi",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-6-duplicate-mutable-accounts-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/6-duplicate-mutable-accounts/insecure/src/lib.rs",
+      "content_hash": "d568111726ffd05eaca9541554728e67c97dd1b08cbfb91df994a83ee8d3716a",
+      "category": "6-duplicate-mutable-accounts",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-6-duplicate-mutable-accounts-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/6-duplicate-mutable-accounts/recommended/src/lib.rs",
+      "content_hash": "5a633e1e70dc21fa90979c8d9ab4e928b472022bbdaf1c0360d0c4b0fcbce6d7",
+      "category": "6-duplicate-mutable-accounts",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-6-duplicate-mutable-accounts-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/6-duplicate-mutable-accounts/secure/src/lib.rs",
+      "content_hash": "b2d43922316cbb710a6e4eb84857c33092d81e52187e747efef9e5d38c1f291c",
+      "category": "6-duplicate-mutable-accounts",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-7-bump-seed-canonicalization-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/7-bump-seed-canonicalization/insecure/src/lib.rs",
+      "content_hash": "51501cd1bd284bc4583d41eb7ce2496cefe479a6831b125b0cb53b7fb2aa57a6",
+      "category": "7-bump-seed-canonicalization",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-7-bump-seed-canonicalization-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/7-bump-seed-canonicalization/recommended/src/lib.rs",
+      "content_hash": "c467cb5cb1d2b323b5dd227a6b5ab3ca861f45ff8adc2dabb1a65bb7591f8588",
+      "category": "7-bump-seed-canonicalization",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-7-bump-seed-canonicalization-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/7-bump-seed-canonicalization/secure/src/lib.rs",
+      "content_hash": "9bae2d0eea7351304a5b5c0413238c80c660c3ca2a493c7f5dbf7a77a7fc3e50",
+      "category": "7-bump-seed-canonicalization",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-8-pda-sharing-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/8-pda-sharing/insecure/src/lib.rs",
+      "content_hash": "ec28374c0c805cc601cddc00d2fcc5184522244634308fbb0eb12601eeea8f88",
+      "category": "8-pda-sharing",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-8-pda-sharing-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/8-pda-sharing/recommended/src/lib.rs",
+      "content_hash": "049c86cec5afe9c79ae3268e86940f2c8f6812aeda6c8e48c3baa0c7ad8ef9cf",
+      "category": "8-pda-sharing",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-8-pda-sharing-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/8-pda-sharing/secure/src/lib.rs",
+      "content_hash": "d8c1628c87673555be86f5a4abea191305d8ecbe83a391ecfbcd1d8ab7139727",
+      "category": "8-pda-sharing",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-9-closing-accounts-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/9-closing-accounts/insecure/src/lib.rs",
+      "content_hash": "29a33e3d2680ae16a2c2016930881155fde4d8862ee008d43c92c26a1d7f1823",
+      "category": "9-closing-accounts",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-9-closing-accounts-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/9-closing-accounts/insecure-still/src/lib.rs",
+      "content_hash": "96c000e1ccdcfe2dc3d3d0b74010f596b24f25b3d7fd22c4134f78f31fc360e2",
+      "category": "9-closing-accounts",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-9-closing-accounts-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/9-closing-accounts/insecure-still-still/src/lib.rs",
+      "content_hash": "df418598f6235b68d95b44d2b0e9486795850c55b2856d17b78ed0ac546eb857",
+      "category": "9-closing-accounts",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-9-closing-accounts-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/9-closing-accounts/recommended/src/lib.rs",
+      "content_hash": "4c023ebf1e901b38b69b94966b4605eaeb5eae88cf5627651250b92ad6181ef1",
+      "category": "9-closing-accounts",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    },
+    {
+      "id": "sealevel-9-closing-accounts-lib",
+      "dataset": "sealevel-attacks",
+      "chain": "solana",
+      "path": "external/benchmarks/sealevel-attacks/programs/9-closing-accounts/secure/src/lib.rs",
+      "content_hash": "0fac05a13221189a0a1e61d0236e4ead32b7a92933e4187ea514065cb984f183",
+      "category": "9-closing-accounts",
+      "expected_signal": "solana_anchor_footgun",
+      "safe_use": "local_static_analysis_or_test_validator_only"
+    }
+  ]
+}

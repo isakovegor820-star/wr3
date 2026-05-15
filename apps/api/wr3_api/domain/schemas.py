@@ -129,7 +129,7 @@ class CreateAuditRequest(BaseModel):
     @model_validator(mode="after")
     def require_address_or_source(self) -> "CreateAuditRequest":
         if not self.address and not self.source:
-            raise ValueError("address or source is required")
+            raise ValueError("нужен адрес или исходный код")
         return self
 
     @field_validator("address")
@@ -139,9 +139,9 @@ class CreateAuditRequest(BaseModel):
             return value
         chain = info.data.get("chain")
         if chain != Chain.SOLANA and not EVM_ADDRESS_RE.match(value):
-            raise ValueError("EVM address must be 0x-prefixed and 40 hex chars")
+            raise ValueError("EVM-адрес должен начинаться с 0x и содержать 40 hex-символов")
         if chain == Chain.SOLANA and len(value) < 32:
-            raise ValueError("Solana address is too short")
+            raise ValueError("Solana-адрес слишком короткий")
         return value
 
 

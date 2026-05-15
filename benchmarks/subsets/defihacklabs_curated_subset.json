@@ -1,0 +1,607 @@
+{
+  "kind": "wr3_curated_benchmark_subset",
+  "created_at": "2026-05-15T09:05:42.692950+00:00",
+  "case_count": 60,
+  "cases": [
+    {
+      "id": "defihacklabs-2017-07-Parity_first_hack_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2017-07/Parity_first_hack_exp.sol",
+      "content_hash": "39293e00375762c781c3bdf4a94188aa36c517ce44aed97958ff5585c5fb7a15",
+      "category": "2017-07",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2017-11-Parity_kill_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2017-11/Parity_kill_exp.sol",
+      "content_hash": "d19520035888d00275947fe1d0ab6e35f49d04341aba1d439ecab0d674ee636d",
+      "category": "2017-11",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2018-04-BEC_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2018-04/BEC_exp.sol",
+      "content_hash": "6fd293f1e1c467d0228914cdfd245a38ad714bf7f9bee506878579794a4c2444",
+      "category": "2018-04",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2018-04-SmartMesh_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2018-04/SmartMesh_exp.sol",
+      "content_hash": "dc006fab9fca668bb31ff1fc8d70bf5ed4c936742cf6270629b241f761273be9",
+      "category": "2018-04",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2018-10-SpankChain_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2018-10/SpankChain_exp.sol",
+      "content_hash": "e6e79f1d9dbbbc99919aa8d28a0be85c0208eee27650a2e834c9c5a10b616af5",
+      "category": "2018-10",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2020-04-LendfMe_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2020-04/LendfMe_exp.sol",
+      "content_hash": "13c4d010ba6311559673009f1f5b1ef74c6c1827d06140c62a5e7600ccfbf3b0",
+      "category": "2020-04",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2020-04-uniswap-erc777",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2020-04/uniswap-erc777.sol",
+      "content_hash": "e1148bd9828518359450ce84d479f1fee1cc28f93cc0a7bbf1320c1c90b12311",
+      "category": "2020-04",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2020-06-Balancer_20200628_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2020-06/Balancer_20200628_exp.sol",
+      "content_hash": "7d457345b708c609b90823e87a0e34dc7a89c814939fb0823dce1d65811ee81c",
+      "category": "2020-06",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2020-06-Bancor_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2020-06/Bancor_exp.sol",
+      "content_hash": "abd6e7917494f4fcc1f044d2463ec93edeba2ce70fe814b61726403b725f5045",
+      "category": "2020-06",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2020-08-Opyn_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2020-08/Opyn_exp.sol",
+      "content_hash": "91bc667000fa78dd0e9b0848d55f491d7e0f0ad3dd22fdfd3e31158dd0c9581e",
+      "category": "2020-08",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2020-09-bzx_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2020-09/bzx_exp.sol",
+      "content_hash": "b5296bae83072ab75d19c24409192a00b693c98a6f90f9bb73b048a95bd52115",
+      "category": "2020-09",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2020-10-HarvestFinance_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2020-10/HarvestFinance_exp.sol",
+      "content_hash": "9a090685437a2537b2da8635facaf05de391204571769370df9df6b4e18f14f5",
+      "category": "2020-10",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2020-11-Pickle_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2020-11/Pickle_exp.sol",
+      "content_hash": "946d7bd20228980ed6a84a463adc0ca28ea25d5df188a75bc807a247d5595597",
+      "category": "2020-11",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2020-12-Cover_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2020-12/Cover_exp.sol",
+      "content_hash": "d7498517d839053ffd7eebfadb38b471203e803d12627e29a90cf0920f9b359b",
+      "category": "2020-12",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-01-Sushi_Badger_Digg_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-01/Sushi_Badger_Digg_exp.sol",
+      "content_hash": "bda5eadecd9b7893433e5c402efc7b590f97fb9cab04452c6b91fda01d7bbb84",
+      "category": "2021-01",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-02-Yearn_ydai_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-02/Yearn_ydai_exp.sol",
+      "content_hash": "98b018b00ffadc4157fc34e546c3a84f3824cbb440fd0dd0352a5977be89c72b",
+      "category": "2021-02",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-03-PAID_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-03/PAID_exp.sol",
+      "content_hash": "1835d33ab25a2a8408effa271ae0bda8c94381875c87141ae4b1b83a5d937d4e",
+      "category": "2021-03",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-03-dodo_flashloan_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-03/dodo_flashloan_exp.sol",
+      "content_hash": "124bf22a388fb6d45ac3628a2dd7dc22f1e7980ee722662a3282347d65f6d49a",
+      "category": "2021-03",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-04-Uranium_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-04/Uranium_exp.sol",
+      "content_hash": "d3c7d96485eafc8aaf71397dae163bd31cac7866e5c6b11aa14ec7a255b11963",
+      "category": "2021-04",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-05-BurgerSwap_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-05/BurgerSwap_exp.sol",
+      "content_hash": "49e19e7f6d6dbc5624447ea1ecf0d7c690f7cc26d38d4957153519b552006492",
+      "category": "2021-05",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-05-JulSwap_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-05/JulSwap_exp.sol",
+      "content_hash": "adebf2c42e8c56fdadf7678b803f5fe3c6648388fc4882ab6ba04427dfca2738",
+      "category": "2021-05",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-05-PancakeBunny_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-05/PancakeBunny_exp.sol",
+      "content_hash": "17527a36b6a4efc3128073faf89fc83d4b6bf377e23fd6be58df837559d4f51e",
+      "category": "2021-05",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-05-RariCapital_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-05/RariCapital_exp.sol",
+      "content_hash": "83f41b9e9c1e7629de9d5dcbf0415feed4a43ad83e3f6a3b61fdbddd72f12fc4",
+      "category": "2021-05",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-05-Spartan_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-05/Spartan_exp.sol",
+      "content_hash": "7386f7bff4182bd1bf081c4fce990dea607d03692214cea0cf9f58c12c5e4ec2",
+      "category": "2021-05",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-05-ValueDefi_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-05/ValueDefi_exp.sol",
+      "content_hash": "a2010785f7605cf51d2b4acd431f0490912b831be62297f37965f6bf35d0537a",
+      "category": "2021-05",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-05-bEarn_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-05/bEarn_exp.sol",
+      "content_hash": "97e91b898243c02804e460c983ddb67d9f7aa936d8e22e0bcd48d73c1d1fb860",
+      "category": "2021-05",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-06-88mph_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-06/88mph_exp.sol",
+      "content_hash": "0e68dfabcb32f73fc9e630a8d98e506f60f3155f1ebe941b8ca837113895172d",
+      "category": "2021-06",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-06-Eleven_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-06/Eleven_exp.sol",
+      "content_hash": "7dcfe8b9845dccffaee2f66ac56e7b74ce6bf7797baf346f74da2520fd5bafa9",
+      "category": "2021-06",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-06-PancakeHunny_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-06/PancakeHunny_exp.sol",
+      "content_hash": "df166a897e20c3ca4ef213dadd1d1e36b554a981faab65a7b6c340a0454e972a",
+      "category": "2021-06",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-06-SafeDollar_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-06/SafeDollar_exp.sol",
+      "content_hash": "55394bc7c4189f27e029a4da3629120efda9c515829c1d112b9fc852852bac29",
+      "category": "2021-06",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-06-xWin_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-06/xWin_exp.sol",
+      "content_hash": "0f20938c803ce8f72b246b0635fc8a80348cf4398d07fbcf2b69a5f0c6280985",
+      "category": "2021-06",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-07-Chainswap_exp1",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-07/Chainswap_exp1.sol",
+      "content_hash": "8e0a57c7eae4ca6902f6bc8e3d6c705ac3402d44b53d576e28fcde40c49b8ebd",
+      "category": "2021-07",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-07-Chainswap_exp2",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-07/Chainswap_exp2.sol",
+      "content_hash": "7ad6c65634b6bd710d78a69ef1e48e1ccbdf214fd574a88c070f2ff9f2294935",
+      "category": "2021-07",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-07-Levyathan_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-07/Levyathan_exp.sol",
+      "content_hash": "d639d357c57d955d0ff60dc7045c8939042abca4fafd39ce49dc4767dcfcee21",
+      "category": "2021-07",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-08-Cream_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-08/Cream_exp.sol",
+      "content_hash": "cf6b222e9adaa83d79a071d1d8656581d516cde227a22eb70711239061b58821",
+      "category": "2021-08",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-08-PolyNetwork_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-08/PolyNetwork_exp.sol",
+      "content_hash": "c2159157b5db1bcb6ad921a42cd5997215a49c7d7fb737bc7d2e2211787cb534",
+      "category": "2021-08",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-08-Popsicle_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-08/Popsicle_exp.sol",
+      "content_hash": "fa46d52c56978dbe4d69bf086264d9bd8ce909ff33a38e27230378fa962fe0d6",
+      "category": "2021-08",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-08-WaultFinance_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-08/WaultFinance_exp.sol",
+      "content_hash": "bae5f93d778db7d82c7386222e37d00473c7d9ad0b3e82fb8242b07a068c1631",
+      "category": "2021-08",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-08-XSURGE_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-08/XSURGE_exp.sol",
+      "content_hash": "a7e672ca271e642744ef901fe5c4a92000b650888665522d22bdcb0ba8ab44fe",
+      "category": "2021-08",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-09-DaoMaker_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-09/DaoMaker_exp.sol",
+      "content_hash": "9789092059e7f1284883e52e160fc98d21c2bd906c1cf2b068298005274911bb",
+      "category": "2021-09",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-09-Nimbus_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-09/Nimbus_exp.sol",
+      "content_hash": "365ec871b6414be54fc288679d81129cfa4b96400d74db3d7d445a680839c178",
+      "category": "2021-09",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-09-NowSwap_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-09/NowSwap_exp.sol",
+      "content_hash": "4e100dacb1843374fd88a30376fe13d92da9968abc369a80afb76d7454b8c815",
+      "category": "2021-09",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-09-Sushimiso_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-09/Sushimiso_exp.sol",
+      "content_hash": "d3b04de1a58b50c2e2c6db4f8e89235131ca65366ba60c2f1b335ef25f1ec3d8",
+      "category": "2021-09",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-09-ZABU_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-09/ZABU_exp.sol",
+      "content_hash": "385381ce4fc0b78067054f1642e827077d2620e0f2dacd614472cfb250c1ceab",
+      "category": "2021-09",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-10-Cream_2_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-10/Cream_2_exp.sol",
+      "content_hash": "da1e7ade506666557a9ef866042925f7b147e5ff954021b38e4e5369f9f4dfe5",
+      "category": "2021-10",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-10-IndexedFinance_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-10/IndexedFinance_exp.sol",
+      "content_hash": "fbdba71c735293fefeb56d491bb64e9d28b345447668cbe858086533012ab98b",
+      "category": "2021-10",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-11-Mono_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-11/Mono_exp.sol",
+      "content_hash": "d6c68040e8b24aafa73f5353c1c51b713e2cf99f270ab1d019bd6b8aed168e54",
+      "category": "2021-11",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-11-Ploutoz_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-11/Ploutoz_exp.sol",
+      "content_hash": "cceb6324ca1dc31edabd5dc097ff3f1078ce98dc0e056c54bd6ff74dc7d70e08",
+      "category": "2021-11",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-12-Grim_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-12/Grim_exp.sol",
+      "content_hash": "08c61f4c748481e7f6ac278220e858d7a78d0ff02327f1a0b217e0b961a401fb",
+      "category": "2021-12",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-12-NerveBridge_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-12/NerveBridge_exp.sol",
+      "content_hash": "a765f759e2988103e367243189014437219b5bf52623f12a6992ee253c69f2d9",
+      "category": "2021-12",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2021-12-Visor_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2021-12/Visor_exp.sol",
+      "content_hash": "b940f6bf00db087a501bc2ecc4895bcf0b9c397092e56e423525f3863527d698",
+      "category": "2021-12",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2022-01-Anyswap_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2022-01/Anyswap_exp.sol",
+      "content_hash": "5800ab98fff77192d4cb003c85ba5d868603726c1f13b96e6f93bba6f6145ea2",
+      "category": "2022-01",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2022-01-Qubit_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2022-01/Qubit_exp.sol",
+      "content_hash": "24ae87ced5df0bdb2b3f64cbd30ddbfd55647e047487343933a5ea3a1bad9c74",
+      "category": "2022-01",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2022-02-BuildF_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2022-02/BuildF_exp.sol",
+      "content_hash": "3a0e357ab6c8eb3b9532529806b56570e62d4850a4b3db8a41f287b28b17626d",
+      "category": "2022-02",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2022-02-Meter_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2022-02/Meter_exp.sol",
+      "content_hash": "1fa45f12f9bb35c690715e5ee731bb5831e470ff4a26697726948165036d372d",
+      "category": "2022-02",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2022-02-Sandbox_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2022-02/Sandbox_exp.sol",
+      "content_hash": "c8ab3a6d741f2de864841f0c5fe01ff4cfa4655d5ed5da2d21e483432631191b",
+      "category": "2022-02",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2022-02-TecraSpace_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2022-02/TecraSpace_exp.sol",
+      "content_hash": "fd8bccd1b1173d92394901e4a1ff17886c2381fd1c213c32eaf3bfa3db6022c4",
+      "category": "2022-02",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2022-03-Agave_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2022-03/Agave_exp.sol",
+      "content_hash": "f59704de6f41426214e1c7b9827d079160a03e6b59b7b55a4256b8e96089cf04",
+      "category": "2022-03",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2022-03-Auctus_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2022-03/Auctus_exp.sol",
+      "content_hash": "b321d224e7ce60b72fced0320929bc029249feb1da961365deb0500ea2997f00",
+      "category": "2022-03",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    },
+    {
+      "id": "defihacklabs-2022-03-Bacon_exp",
+      "dataset": "DeFiHackLabs",
+      "chain": "evm",
+      "path": "external/benchmarks/DeFiHackLabs/src/test/2022-03/Bacon_exp.sol",
+      "content_hash": "2fcc0cf7a97058b4c655edb13ca9e80460e2260096837983ab1edf279fe13bd4",
+      "category": "2022-03",
+      "expected_signal": "historical_exploit_pattern",
+      "safe_use": "read_only_benchmark_no_mainnet_execution"
+    }
+  ]
+}

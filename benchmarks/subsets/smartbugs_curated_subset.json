@@ -1,0 +1,497 @@
+{
+  "kind": "wr3_curated_benchmark_subset",
+  "created_at": "2026-05-15T09:05:42.692302+00:00",
+  "case_count": 49,
+  "cases": [
+    {
+      "id": "smartbugs-reentrancy-0x01f8c4e3fa3edeb29e514cba738d87ce8c091d3f",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/reentrancy/0x01f8c4e3fa3edeb29e514cba738d87ce8c091d3f.sol",
+      "content_hash": "0196d033850b295690465d0f7d2baae8b3570df29c9d03d507496b45155a84e5",
+      "category": "reentrancy",
+      "expected_signal": "reentrancy",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-reentrancy-0x23a91059fdc9579a9fbd0edc5f2ea0bfdb70deb4",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/reentrancy/0x23a91059fdc9579a9fbd0edc5f2ea0bfdb70deb4.sol",
+      "content_hash": "bcd0fdfad9f6594fdbc940967321856490ed4bffbe8b6ab9c75c6b85072528a5",
+      "category": "reentrancy",
+      "expected_signal": "reentrancy",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-reentrancy-0x4320e6f8c05b27ab4707cd1f6d5ce6f3e4b3a5a1",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/reentrancy/0x4320e6f8c05b27ab4707cd1f6d5ce6f3e4b3a5a1.sol",
+      "content_hash": "97a35d9e594162b70c9b21ce2245863406e6a47ae979e25a9d32a6f3cc615ec4",
+      "category": "reentrancy",
+      "expected_signal": "reentrancy",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-reentrancy-0x4e73b32ed6c35f570686b89848e5f39f20ecc106",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/reentrancy/0x4e73b32ed6c35f570686b89848e5f39f20ecc106.sol",
+      "content_hash": "16b738d378a612c4a34c7482ce680dd1b40fabe3059fca8e2c37941c895f9716",
+      "category": "reentrancy",
+      "expected_signal": "reentrancy",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-reentrancy-0x561eac93c92360949ab1f1403323e6db345cbf31",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/reentrancy/0x561eac93c92360949ab1f1403323e6db345cbf31.sol",
+      "content_hash": "7ba4aa075db5de2a1badbdd19dae1404a638f188cb5715abcc3fcafff0f8bb10",
+      "category": "reentrancy",
+      "expected_signal": "reentrancy",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-reentrancy-0x627fa62ccbb1c1b04ffaecd72a53e37fc0e17839",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/reentrancy/0x627fa62ccbb1c1b04ffaecd72a53e37fc0e17839.sol",
+      "content_hash": "295dba1924e8d40f718aa97197ce45871ecae2cec07d13f1bc8ce4b887c06a19",
+      "category": "reentrancy",
+      "expected_signal": "reentrancy",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-access_control-FibonacciBalance",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/access_control/FibonacciBalance.sol",
+      "content_hash": "784009c0758940079bd3a7402a3acdf60e3a9a659012e19b0aa21dbc9c0a35ab",
+      "category": "access_control",
+      "expected_signal": "access_control",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-access_control-arbitrary_location_write_simple",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/access_control/arbitrary_location_write_simple.sol",
+      "content_hash": "bbbdb5367463fd3d1e11b2c569695d8b4734e3f88fcf937a34469a23121b01ab",
+      "category": "access_control",
+      "expected_signal": "access_control",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-access_control-incorrect_constructor_name1",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/access_control/incorrect_constructor_name1.sol",
+      "content_hash": "d918731cebddf34ad385dd799691237e0ec1aab09f34ce7eb6bbe83ec86cd8c8",
+      "category": "access_control",
+      "expected_signal": "access_control",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-access_control-incorrect_constructor_name2",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/access_control/incorrect_constructor_name2.sol",
+      "content_hash": "d210fc21c6fdf273cfe2af52408b09ec82df89ebdea554b0c6356ad8b5d8796d",
+      "category": "access_control",
+      "expected_signal": "access_control",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-access_control-incorrect_constructor_name3",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/access_control/incorrect_constructor_name3.sol",
+      "content_hash": "a1a505f4d25449a4a566b9a84b8c51ecdc2cbe768f9d1f041900d90a530807a6",
+      "category": "access_control",
+      "expected_signal": "access_control",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-access_control-mapping_write",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/access_control/mapping_write.sol",
+      "content_hash": "a4c6ab0924feb97c929511f65e9f86a82ca5efa307aa29dcae69a21d2fc0fbd6",
+      "category": "access_control",
+      "expected_signal": "access_control",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-unchecked_low_level_calls-0x07f7ecb66d788ab01dc93b9b71a88401de7d0f2e",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/unchecked_low_level_calls/0x07f7ecb66d788ab01dc93b9b71a88401de7d0f2e.sol",
+      "content_hash": "cd990cb200f29075f790bed8d2a7f15e7b01a974c533e6206a28842aaa29f368",
+      "category": "unchecked_low_level_calls",
+      "expected_signal": "unchecked_low_level_calls",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-unchecked_low_level_calls-0x0cbe050f75bc8f8c2d6c0d249fea125fd6e1acc9",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/unchecked_low_level_calls/0x0cbe050f75bc8f8c2d6c0d249fea125fd6e1acc9.sol",
+      "content_hash": "25e13af95fecbc40ae362a331ffb65ad8c1ac284298e3b83bfe194cfb52d0386",
+      "category": "unchecked_low_level_calls",
+      "expected_signal": "unchecked_low_level_calls",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-unchecked_low_level_calls-0x19cf8481ea15427a98ba3cdd6d9e14690011ab10",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/unchecked_low_level_calls/0x19cf8481ea15427a98ba3cdd6d9e14690011ab10.sol",
+      "content_hash": "fe2fb0a0e173f241ce33e07f3e01a4b0c8c2f8501e506c360af16648fa47b024",
+      "category": "unchecked_low_level_calls",
+      "expected_signal": "unchecked_low_level_calls",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-unchecked_low_level_calls-0x2972d548497286d18e92b5fa1f8f9139e5653fd2",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/unchecked_low_level_calls/0x2972d548497286d18e92b5fa1f8f9139e5653fd2.sol",
+      "content_hash": "b9c32c34e06c5b84561b827738b0f4d4fe60d4292516714f6a08cbc8925ccac0",
+      "category": "unchecked_low_level_calls",
+      "expected_signal": "unchecked_low_level_calls",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-unchecked_low_level_calls-0x39cfd754c85023648bf003bea2dd498c5612abfa",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/unchecked_low_level_calls/0x39cfd754c85023648bf003bea2dd498c5612abfa.sol",
+      "content_hash": "580b0f56fdf071e7d6831315c17498eb1a0e7b1d9857ebb964dcc9f9e37f3996",
+      "category": "unchecked_low_level_calls",
+      "expected_signal": "unchecked_low_level_calls",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-unchecked_low_level_calls-0x3a0e9acd953ffc0dd18d63603488846a6b8b2b01",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/unchecked_low_level_calls/0x3a0e9acd953ffc0dd18d63603488846a6b8b2b01.sol",
+      "content_hash": "09a3eae973399d78040611f5e6056823cec63331d899aff4a7bdc244bcf71172",
+      "category": "unchecked_low_level_calls",
+      "expected_signal": "unchecked_low_level_calls",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-arithmetic-BECToken",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/arithmetic/BECToken.sol",
+      "content_hash": "5765dccd66c76ce39da689c314364dc380e0b6a984ad351c5f81eb8e35e749b9",
+      "category": "arithmetic",
+      "expected_signal": "arithmetic",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-arithmetic-insecure_transfer",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/arithmetic/insecure_transfer.sol",
+      "content_hash": "3b0317da6075edb0df489502797d928ae0e6cd903da90b5818b4f7c0f581b9b8",
+      "category": "arithmetic",
+      "expected_signal": "arithmetic",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-arithmetic-integer_overflow_1",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/arithmetic/integer_overflow_1.sol",
+      "content_hash": "0ca34ef4d8e14c6ce859a5fe0a9f1fce3a66ad687a13774945066ed56a6dc34e",
+      "category": "arithmetic",
+      "expected_signal": "arithmetic",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-arithmetic-integer_overflow_add",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/arithmetic/integer_overflow_add.sol",
+      "content_hash": "a552367197068e110bdad903a28cb28b7762f8f68ffafde02a58286b89650466",
+      "category": "arithmetic",
+      "expected_signal": "arithmetic",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-arithmetic-integer_overflow_benign_1",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/arithmetic/integer_overflow_benign_1.sol",
+      "content_hash": "7f05171b2d6c4611145729a0444d31d7e07d70743995520df4641f17929495c3",
+      "category": "arithmetic",
+      "expected_signal": "arithmetic",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-arithmetic-integer_overflow_mapping_sym_1",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/arithmetic/integer_overflow_mapping_sym_1.sol",
+      "content_hash": "abecfbc6b745841cfa4d27227dca7dbd0967e0a7198880c1fc3f30f92f2abe3b",
+      "category": "arithmetic",
+      "expected_signal": "arithmetic",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-bad_randomness-blackjack",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/bad_randomness/blackjack.sol",
+      "content_hash": "35fddfbd32c24d934617f8da3e75adeebaa269a086bd34e50ce629f4cec17a0e",
+      "category": "bad_randomness",
+      "expected_signal": "bad_randomness",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-bad_randomness-etheraffle",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/bad_randomness/etheraffle.sol",
+      "content_hash": "5cd651cfdea6e3a7b9713e3fdb30aaabaffff6900f8f64baaf458306a1ba374e",
+      "category": "bad_randomness",
+      "expected_signal": "bad_randomness",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-bad_randomness-guess_the_random_number",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/bad_randomness/guess_the_random_number.sol",
+      "content_hash": "d27ca8263b122093d6798f08c58264dd8aa552b7dd2e567aac648928be6e17f5",
+      "category": "bad_randomness",
+      "expected_signal": "bad_randomness",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-bad_randomness-lottery",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/bad_randomness/lottery.sol",
+      "content_hash": "597dbc64af9d2e88da7a2b6f60e38b13e326d34ea3096e7f84e236f95cc645cc",
+      "category": "bad_randomness",
+      "expected_signal": "bad_randomness",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-bad_randomness-lucky_doubler",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/bad_randomness/lucky_doubler.sol",
+      "content_hash": "0228289d9aa97980c0c6925a0d71f5f7c9ca62c92a554504cd2e9e835d004b37",
+      "category": "bad_randomness",
+      "expected_signal": "bad_randomness",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-bad_randomness-old_blockhash",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/bad_randomness/old_blockhash.sol",
+      "content_hash": "fcacbdf48076326222bd952ab15d0ef3a1cb2bd0acf983b8ff6cdb90633c30e7",
+      "category": "bad_randomness",
+      "expected_signal": "bad_randomness",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-denial_of_service-auction",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/denial_of_service/auction.sol",
+      "content_hash": "85952d4855d88d2870b14816dddd238c13f5b70bea0950564c1563e1a80f2438",
+      "category": "denial_of_service",
+      "expected_signal": "denial_of_service",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-denial_of_service-dos_address",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/denial_of_service/dos_address.sol",
+      "content_hash": "4f6960a84c3da5f791faf0111033b1d6a425e2575fb03b31acd248210497794e",
+      "category": "denial_of_service",
+      "expected_signal": "denial_of_service",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-denial_of_service-dos_number",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/denial_of_service/dos_number.sol",
+      "content_hash": "3ea414a7d2826634670730c75f983ee8cefc26a6a34fdda57844c0e897d362b0",
+      "category": "denial_of_service",
+      "expected_signal": "denial_of_service",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-denial_of_service-dos_simple",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/denial_of_service/dos_simple.sol",
+      "content_hash": "53dcfd96beb66caaefc66373d6cef836a0b1f0320d3e4421426cb26590fc2c0c",
+      "category": "denial_of_service",
+      "expected_signal": "denial_of_service",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-denial_of_service-list_dos",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/denial_of_service/list_dos.sol",
+      "content_hash": "d0d1d9c65414feae0e9181d2a9353a5e19389fa4904e713ca43d173f1d0e0c90",
+      "category": "denial_of_service",
+      "expected_signal": "denial_of_service",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-denial_of_service-send_loop",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/denial_of_service/send_loop.sol",
+      "content_hash": "74fecd9a7e34b0402cc9f86ec890a84c0c4c1501fc6583e5b1ea7349991c5ff2",
+      "category": "denial_of_service",
+      "expected_signal": "denial_of_service",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-front_running-ERC20",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/front_running/ERC20.sol",
+      "content_hash": "2945981f9e38addeee1e3936e18871cb4bd96a70ba84836dd48cd953a8d910f7",
+      "category": "front_running",
+      "expected_signal": "front_running",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-front_running-FindThisHash",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/front_running/FindThisHash.sol",
+      "content_hash": "3cf407b311e38f93e6a7e1a40b5cb9dfcd06a995625d60fd6b3285bea043a9d2",
+      "category": "front_running",
+      "expected_signal": "front_running",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-front_running-eth_tx_order_dependence_minimal",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/front_running/eth_tx_order_dependence_minimal.sol",
+      "content_hash": "ff02571525b00a0261fa98cc57fc00822124d72ce0039b4e46423523154bf5ed",
+      "category": "front_running",
+      "expected_signal": "front_running",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-front_running-odds_and_evens",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/front_running/odds_and_evens.sol",
+      "content_hash": "10a78792f4f19a393fe2f7513ec9570f5d218e203961f6ed5af4484fbb891dc8",
+      "category": "front_running",
+      "expected_signal": "front_running",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-other-crypto_roulette",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/other/crypto_roulette.sol",
+      "content_hash": "1336f802d8a5b6f252fa17eb8402e5aaf69e7b9f812677b6fecbb7c1aff4f3cf",
+      "category": "other",
+      "expected_signal": "other",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-other-name_registrar",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/other/name_registrar.sol",
+      "content_hash": "03a03f323371396aba97a192af5aea40bba82449ffb0425905dc5031152f1b88",
+      "category": "other",
+      "expected_signal": "other",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-other-open_address_lottery",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/other/open_address_lottery.sol",
+      "content_hash": "6a7e5b5d36980a89a2438ca6bd00fdbed2591ad022dabc3692afff8b8ee72cfd",
+      "category": "other",
+      "expected_signal": "other",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-short_addresses-short_address_example",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/short_addresses/short_address_example.sol",
+      "content_hash": "71314df3e4ae74d53be017a98a080891eedac1b894b650d52c18288d71a3022d",
+      "category": "short_addresses",
+      "expected_signal": "short_addresses",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-time_manipulation-ether_lotto",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/time_manipulation/ether_lotto.sol",
+      "content_hash": "ae857a5403364fbbc1de916efea4db44ae96fd4882ba81f101588306b9356eb2",
+      "category": "time_manipulation",
+      "expected_signal": "time_manipulation",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-time_manipulation-governmental_survey",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/time_manipulation/governmental_survey.sol",
+      "content_hash": "290568dbb9906178725fada7e522a98d0c353753c4873ab14d8cad26a42bdbb3",
+      "category": "time_manipulation",
+      "expected_signal": "time_manipulation",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-time_manipulation-lottopollo",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/time_manipulation/lottopollo.sol",
+      "content_hash": "e8a01542ffe13c206f1514a8f0a70d80788f6f22399175ef2d975c5610dcc331",
+      "category": "time_manipulation",
+      "expected_signal": "time_manipulation",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-time_manipulation-roulette",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/time_manipulation/roulette.sol",
+      "content_hash": "618aed94420541c4662527ef072c342f67adf995af0c279f2dfcf7a4561a0330",
+      "category": "time_manipulation",
+      "expected_signal": "time_manipulation",
+      "safe_use": "local_static_analysis_only"
+    },
+    {
+      "id": "smartbugs-time_manipulation-timed_crowdsale",
+      "dataset": "smartbugs-curated",
+      "chain": "evm",
+      "path": "external/benchmarks/smartbugs-curated/dataset/time_manipulation/timed_crowdsale.sol",
+      "content_hash": "52fa5d86b7ee71874f54c1973562f0ff76b58a0a2ba2371e5193f783bd30222e",
+      "category": "time_manipulation",
+      "expected_signal": "time_manipulation",
+      "safe_use": "local_static_analysis_only"
+    }
+  ]
+}

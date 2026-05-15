@@ -1,4 +1,4 @@
-import type { AuditState, Chain, Finding } from "@wr3/shared";
+import type { AuditState, Chain, Finding, Tier } from "@wr3/shared";
 
 export const chainLabels: Record<Chain, string> = {
   ethereum: "Ethereum",
@@ -14,7 +14,7 @@ export const auditStateLabels: Record<AuditState, string> = {
   ingesting: "загрузка исходников",
   needs_source: "нужен исходный код",
   static_running: "статический анализ",
-  triage_running: "AI-триаж",
+  triage_running: "ИИ-триаж",
   poc_running: "PoC-проверка",
   fuzzing_running: "фаззинг",
   scoring: "скоринг",
@@ -44,11 +44,50 @@ export const exploitabilityLabels: Record<Finding["exploitability"], string> = {
   dismissed: "отклонено"
 };
 
+export const tierLabels: Record<Tier, string> = {
+  free: "Бесплатный",
+  hobby: "Хобби",
+  team: "Команда",
+  pro: "Про"
+};
+
+export const scoreAxisLabels = {
+  code_security_score: "Безопасность кода",
+  centralization_score: "Централизация",
+  liquidity_score: "Ликвидность",
+  team_kyc_score: "Команда / KYC",
+  behavior_score: "Поведение в сети"
+} as const;
+
+export const genericStatusLabels: Record<string, string> = {
+  active: "активно",
+  failed: "ошибка",
+  installed: "установлено",
+  missing_required: "нет обязательного инструмента",
+  skipped_optional: "необязательный инструмент пропущен",
+  ready: "готово",
+  partial: "частично готово",
+  configured: "подключено",
+  free_fallback: "бесплатный резерв",
+  manual: "ручной режим",
+  disabled: "выключено",
+  blocked: "нужен внешний доступ",
+  ready_for_localhost: "готово для localhost",
+  needs_external_access: "нужен внешний доступ",
+  private_contact_pending: "ожидает приватного контакта",
+  seal_911_escalation: "эскалация в SEAL 911",
+  cve_euvd_notice: "подготовка CVE/EUVD",
+  limited_disclosure_allowed: "разрешено ограниченное раскрытие",
+  full_disclosure_allowed: "разрешено полное раскрытие",
+  resolved: "исправлено",
+  closed: "закрыто"
+};
+
 export const scoreCapLabels: Record<string, string> = {
   confirmed_critical: "подтверждённая критичная находка",
   confirmed_high: "подтверждённая находка высокой важности",
   unverified_source: "исходный код не верифицирован",
-  upgradeable_proxy_with_eoa_owner: "обновляемый proxy с EOA-владельцем",
+  upgradeable_proxy_with_eoa_owner: "обновляемый прокси с EOA-владельцем",
   unlimited_owner_mint: "неограниченный mint у владельца"
 };
 
@@ -83,19 +122,19 @@ const findingText: Record<string, string> = {
     "Привилегированный владелец может менять предположения о supply.",
   "Document mint limits, use multisig ownership, or add immutable caps.":
     "Задокументируйте лимиты mint, используйте multisig или добавьте неизменяемые caps.",
-  "No heuristic findings detected": "Heuristic-проход не нашёл находок",
-  "heuristic scan completed": "Heuristic-скан завершён",
+  "No heuristic findings detected": "Эвристический проход не нашёл находок",
+  "heuristic scan completed": "Эвристический скан завершён",
   "This does not mean the contract is safe; only that this MVP pass found no known pattern.":
     "Это не означает, что контракт безопасен; MVP-проход просто не нашёл известный паттерн.",
   "Run full static analysis, LLM triage, and human review before launch.":
-    "Перед запуском проведите полный static analysis, LLM-триаж и human review.",
+    "Перед запуском проведите полный статический анализ, ИИ-триаж и ручное ревью.",
   "Unchecked Solana account requires owner and signer validation":
     "UncheckedAccount в Solana требует проверки owner и signer",
   "UncheckedAccount or AccountInfo usage detected": "Обнаружено использование UncheckedAccount или AccountInfo",
   "Unvalidated accounts can let callers substitute attacker-controlled accounts.":
     "Невалидированные аккаунты позволяют подставить account под контролем атакующего.",
   "Validate owner, signer, mutability, and expected PDA seeds for every unchecked account.":
-    "Проверяйте owner, signer, mutability и ожидаемые PDA seeds для каждого unchecked account.",
+    "Проверяйте владельца, подпись, mutability и ожидаемые PDA seeds для каждого unchecked account.",
   "init_if_needed can enable account reinitialization footguns":
     "init_if_needed может привести к ошибкам reinitialization",
   "init_if_needed constraint detected": "Обнаружен constraint init_if_needed",
@@ -110,31 +149,31 @@ const findingText: Record<string, string> = {
     "Неверная проверка PDA seeds может авторизовать нежелательные действия программы.",
   "Ensure PDA seeds, bumps, and account constraints are explicit and tested.":
     "Убедитесь, что PDA seeds, bumps и account constraints явные и покрыты тестами.",
-  "No Solana heuristic findings detected": "Solana heuristic-проход не нашёл находок",
-  "Solana heuristic scan completed": "Solana heuristic-скан завершён",
+  "No Solana heuristic findings detected": "Эвристический Solana-проход не нашёл находок",
+  "Solana heuristic scan completed": "Эвристический Solana-скан завершён",
   "This does not mean the program is safe; Solana beta coverage is intentionally limited.":
     "Это не означает, что программа безопасна; покрытие Solana beta намеренно ограничено.",
   "Run Anchor tests, Trident fuzzing, and human review before deployment.":
-    "Перед деплоем запустите Anchor tests, Trident fuzzing и human review."
+    "Перед деплоем запустите Anchor-тесты, Trident-фаззинг и ручное ревью."
 };
 
 const limitationLabels: Record<string, string> = {
   demo_data: "демо-данные",
   poc_requires_paid_tier: "PoC доступен только на платном тарифе",
-  anonymous_owner_token_required_for_private_access: "для приватного доступа нужен owner-token",
+  anonymous_owner_token_required_for_private_access: "для приватного доступа нужен токен владельца",
   zdr_required_for_security_triage: "для security-триажа требуется ZDR-маршрут",
-  llm_triage_disabled_using_deterministic_fallback: "LLM-триаж выключен, используется deterministic fallback",
-  poc_requires_standard_or_deep_depth: "PoC требует standard/deep глубину скана",
+  llm_triage_disabled_using_deterministic_fallback: "ИИ-триаж выключен, используется детерминированный резерв",
+  poc_requires_standard_or_deep_depth: "PoC требует стандартную или глубокую проверку",
   poc_no_high_or_critical_candidates: "нет находок высокой/критичной важности для PoC",
   foundry_binary_missing: "Foundry не установлен",
   high_risk_findings_require_human_review_before_public_claim:
-    "high-risk находки требуют human review перед публичным claim",
+    "находки высокого риска требуют ручного ревью перед публичным заявлением",
   public_page_redacts_private_findings: "публичная страница скрывает приватные находки",
-  third_party_scan_public_poc_disabled: "для third-party скана публичный PoC выключен",
-  public_claims_require_human_review: "публичные claims требуют human review",
+  third_party_scan_public_poc_disabled: "для стороннего скана публичный PoC выключен",
+  public_claims_require_human_review: "публичные заявления требуют ручного ревью",
   adversarial_input_detected: "обнаружены признаки prompt-injection",
   verified_source_pull_failed_upload_source: "не удалось подтянуть verified source, нужен исходный код",
-  raw_outputs_require_paid_tier_artifact_access: "сырые выводы требуют платный owner-доступ"
+  raw_outputs_require_paid_tier_artifact_access: "сырые выводы требуют платный доступ владельца"
 };
 
 export function tFindingText(value: string | null | undefined): string {
@@ -160,10 +199,14 @@ export function tLimitation(value: string): string {
     return `${engine} пропущен: ${reason}`;
   }
   if (value.includes("_raw_output_artifact_requires_encryption")) {
-    return "для сохранения сырого вывода нужен ключ шифрования artifacts";
+    return "для сохранения сырого вывода нужен ключ шифрования артефактов";
   }
   if (value.includes("_billing_verification_stub")) {
-    return "billing-проверка тарифа пока работает в MVP-режиме";
+    return "проверка тарифа пока работает в MVP-режиме";
   }
   return value.replaceAll("_", " ");
+}
+
+export function tStatus(value: string): string {
+  return genericStatusLabels[value] ?? value.replaceAll("_", " ");
 }

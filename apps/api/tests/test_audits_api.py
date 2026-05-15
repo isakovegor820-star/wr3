@@ -53,7 +53,7 @@ def test_create_audit_with_source_completes_report():
 
     report = client.get(f"/v1/audits/{audit_id}/report", params={"owner_token": owner_token})
     assert report.status_code == 200
-    assert "AI-assisted предаудит" in report.text
+    assert "ИИ-предаудит" in report.text
 
     raw_outputs = client.get(f"/v1/audits/{audit_id}/raw-outputs", params={"owner_token": owner_token})
     assert raw_outputs.status_code == 200

@@ -77,12 +77,12 @@ export default async function AuditPage({
       <section className="panel access-panel">
         <div>
           <p className="eyebrow">Доступ</p>
-          <h2>{audit.access.is_owner ? "Owner-доступ подтверждён" : "Публичный или редактированный режим"}</h2>
+          <h2>{audit.access.is_owner ? "Доступ владельца подтверждён" : "Публичный или редактированный режим"}</h2>
         </div>
         <p>
           {audit.access.can_view_private_findings
             ? "Приватные находки видны в этой MVP-сессии. Сырые PoC-артефакты всё равно закрыты по тарифу."
-            : "Приватные находки и PoC-артефакты скрыты без owner-token или авторизованного владельца."}
+            : "Приватные находки и PoC-артефакты скрыты без токена владельца или авторизованного владельца."}
         </p>
       </section>
 
@@ -92,7 +92,7 @@ export default async function AuditPage({
         <div className="section-heading">
           <div>
             <p className="eyebrow">Область проверки</p>
-            <h2>Ограничения и safety gates</h2>
+            <h2>Ограничения и защитные ворота</h2>
           </div>
         </div>
         <ul>

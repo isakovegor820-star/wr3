@@ -36,6 +36,7 @@ echo "[wr3-local] API: http://127.0.0.1:8001"
 apps/api/.venv/bin/uvicorn wr3_api.main:app \
   --app-dir apps/api \
   --reload \
+  --reload-dir apps/api/wr3_api \
   --host 127.0.0.1 \
   --port 8001 &
 

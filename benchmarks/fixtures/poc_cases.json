@@ -1,0 +1,11 @@
+[
+  {
+    "id": "local-poc-reentrancy-shape",
+    "chain": "base",
+    "address": "0x0000000000000000000000000000000000002001",
+    "requested_depth": "standard",
+    "tier": "team",
+    "source": "pragma solidity ^0.8.20; contract LocalVault { mapping(address=>uint256) public balances; function deposit() external payable { balances[msg.sender]+=msg.value; } function withdraw() external { uint256 amount=balances[msg.sender]; (bool ok,)=msg.sender.call{value:amount}(\"\"); require(ok); balances[msg.sender]=0; } }",
+    "expected_statuses": ["skipped", "attempted", "confirmed"]
+  }
+]

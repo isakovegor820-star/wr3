@@ -1,0 +1,11 @@
+{
+  "kind": "wr3_sandbox_tool_policy",
+  "status": "ityfuzz_optional_until_trusted_binary_or_patched_build",
+  "required_for_closed_beta": ["forge", "anvil", "medusa", "trident", "solana-test-validator"],
+  "optional_for_closed_beta": ["ityfuzz"],
+  "rules": [
+    "Missing ItyFuzz must produce skipped_optional artifacts, not fake fuzzing results.",
+    "ItyFuzz may become required after a trusted binary, patched source build, or pinned sandbox image is available.",
+    "All fuzzing subprocesses still pass SandboxPolicy and run only on local fixtures, fork/test mode, or safe sandbox inputs."
+  ]
+}

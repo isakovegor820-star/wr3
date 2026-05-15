@@ -7,7 +7,7 @@ if [[ -z "${WR3_DATABASE_URL:-}" ]]; then
 fi
 
 if [[ $# -ne 1 ]]; then
-  echo "usage: scripts/restore_postgres.sh artifacts/backups/wr3-postgres-YYYYMMDDTHHMMSSZ.sql.gz" >&2
+  echo "usage: scripts/restore_postgres.sh artifacts/backups/wr3-postgres-YYYYMMDDTHHMMSSZ.sql.gz[.enc]" >&2
   exit 2
 fi
 
@@ -17,4 +17,16 @@ if [[ ! -f "${backup_path}" ]]; then
   exit 2
 fi
 
-gzip -dc "${backup_path}" | psql "${WR3_DATABASE_URL}" --set ON_ERROR_STOP=on
+if [[ "${backup_path}" == *.enc ]]; then
+  if [[ -z "${WR3_BACKUP_ENCRYPTION_PASSPHRASE:-}" ]]; then
+    echo "WR3_BACKUP_ENCRYPTION_PASSPHRASE is required for encrypted backup restore" >&2
+    exit 2
+  fi
+  openssl enc -d -aes-256-cbc -pbkdf2 \
+    -pass "env:WR3_BACKUP_ENCRYPTION_PASSPHRASE" \
+    -in "${backup_path}" |
+    gzip -dc |
+    psql "${WR3_DATABASE_URL}" --set ON_ERROR_STOP=on
+else
+  gzip -dc "${backup_path}" | psql "${WR3_DATABASE_URL}" --set ON_ERROR_STOP=on
+fi

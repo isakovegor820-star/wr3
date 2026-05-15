@@ -6,6 +6,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+import httpx
+
+from wr3_api.core.config import Settings, get_settings
 from wr3_api.domain.enums import Chain, Severity
 from wr3_api.domain.schemas import utc_now
 from wr3_api.services.rag import DeterministicEmbeddingProvider, cosine_similarity
@@ -65,6 +68,41 @@ class NewsDeduper:
             kept_embeddings.append(embedding)
             seen_ids.add(item.id)
         return kept
+
+
+class NewsIngestionService:
+    def __init__(self, settings: Settings | None = None) -> None:
+        self._settings = settings or get_settings()
+        self._deduper = NewsDeduper()
+
+    async def fetch_defillama_hacks(self, *, limit: int = 25) -> dict[str, object]:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(self._settings.defillama_hacks_url)
+            response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise ValueError("defillama_hacks_list_required")
+        items = [normalize_defillama_hack(item) for item in payload[: max(1, min(limit * 2, 200))] if isinstance(item, dict)]
+        deduped = self._deduper.dedupe(items)[:limit]
+        return {
+            "source": "defillama-hacks",
+            "free_no_key": True,
+            "count": len(deduped),
+            "items": [
+                {
+                    "id": item.id,
+                    "title": item.title,
+                    "url": item.url,
+                    "summary": item.summary,
+                    "chain": item.chain,
+                    "severity": item.severity,
+                    "category": item.category,
+                    "published_at": item.published_at.isoformat(),
+                    "metadata": item.metadata,
+                }
+                for item in deduped
+            ],
+        }
 
 
 def normalize_defillama_hack(raw: dict[str, Any]) -> NewsItem:

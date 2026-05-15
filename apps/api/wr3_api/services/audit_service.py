@@ -159,6 +159,47 @@ class AuditService:
             raise AuditNotFound(str(audit_id))
         return record
 
+    def list_audits_for_dashboard(
+        self,
+        *,
+        chain: Chain | None = None,
+        state: AuditState | None = None,
+        severity: Severity | None = None,
+        actor: AuthContext | None = None,
+    ) -> list[dict[str, object]]:
+        is_local_dashboard = self._settings.environment == "development"
+        if not is_local_dashboard and (actor is None or not actor.is_reviewer):
+            raise AuditAccessDenied("reviewer_access_required_for_audit_dashboard")
+
+        rows: list[dict[str, object]] = []
+        for record in sorted(self._audit_repository.list_records(), key=lambda item: item.updated_at, reverse=True):
+            if chain and record.request.chain != chain:
+                continue
+            if state and record.state != state:
+                continue
+            highest_severity = self._highest_severity(record.findings)
+            if severity and highest_severity != severity:
+                continue
+            rows.append(
+                {
+                    "audit_id": str(record.audit_id),
+                    "owner_access_token": record.owner_access_token if is_local_dashboard else None,
+                    "chain": record.request.chain,
+                    "address": record.request.address,
+                    "state": record.state,
+                    "tier": record.request.tier,
+                    "requested_depth": record.request.requested_depth,
+                    "score": record.score.model_dump(mode="json") if record.score else None,
+                    "finding_count": len(record.findings),
+                    "highest_severity": highest_severity,
+                    "limitations_count": len(record.limitations),
+                    "project_key": f"{record.request.chain}:{record.request.address or 'source-only'}",
+                    "created_at": record.created_at.isoformat(),
+                    "updated_at": record.updated_at.isoformat(),
+                }
+            )
+        return rows
+
     def get_summary(self, audit_id: UUID, access: AuditAccessContext | None = None) -> AuditSummary:
         record = self.get_record(audit_id)
         access_summary = self._access_summary(record, access)
@@ -272,6 +313,11 @@ class AuditService:
         if case is None:
             raise AuditNotFound(case_id)
         return case
+
+    def list_disclosure_cases(self, actor: AuthContext | None = None) -> list[DisclosureCase]:
+        if actor is None or not actor.is_reviewer:
+            raise AuditAccessDenied("reviewer_access_required_for_disclosure_case")
+        return self._disclosure_repository.list_cases()
 
     def append_disclosure_contact(
         self,
@@ -602,6 +648,19 @@ class AuditService:
             record.limitations.append(f"{result.engine}_raw_output_artifact_requires_encryption")
             return None
         return artifact.uri
+
+    def _highest_severity(self, findings: list[Finding]) -> Severity | None:
+        order = {
+            Severity.CRITICAL: 5,
+            Severity.HIGH: 4,
+            Severity.MEDIUM: 3,
+            Severity.LOW: 2,
+            Severity.INFO: 1,
+        }
+        active = [finding.severity for finding in findings if finding.exploitability != Exploitability.DISMISSED]
+        if not active:
+            return None
+        return max(active, key=lambda item: order[item])
 
     def _deterministic_triage(self, findings: list[Finding]) -> list[Finding]:
         deduped: dict[tuple[str, str, str], Finding] = {}

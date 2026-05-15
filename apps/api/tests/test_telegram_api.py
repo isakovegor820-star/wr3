@@ -33,4 +33,42 @@ def test_telegram_unknown_command_returns_help():
     )
 
     assert response.status_code == 200
-    assert "Use /scan" in response.json()["reply"]
+    assert "Используй /scan" in response.json()["reply"]
+
+
+def test_telegram_watch_command_creates_watchlist_entry():
+    response = client.post(
+        "/v1/telegram/webhook",
+        json={
+            "message": {
+                "text": "/watch base 0x0000000000000000000000000000000000000000 demo",
+                "from": {"id": 1508},
+                "chat": {"id": 1508},
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["watchlist_entry"]["chain"] == "base"
+    assert payload["watchlist_entry"]["label"] == "demo"
+
+
+def test_telegram_score_command_returns_public_project_summary():
+    response = client.post(
+        "/v1/telegram/webhook",
+        json={
+            "message": {
+                "text": "/score base 0x0000000000000000000000000000000000000000",
+                "from": {"id": 1508},
+                "chat": {"id": 1508},
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert "wr3 оценка" in payload["reply"]
+    assert payload["project"]["chain"] == "base"

@@ -1,0 +1,19 @@
+name = "wr3-edge"
+main = "worker.ts"
+compatibility_date = "2026-05-12"
+
+[vars]
+WR3_CORE_API_BASE = "https://api.wr3.example"
+
+[[d1_databases]]
+binding = "WR3_EDGE_DB"
+database_name = "wr3-edge-metadata"
+database_id = "f6b0967f-b732-415e-b1cb-997f05b90a8e"
+
+[[r2_buckets]]
+binding = "WR3_ARTIFACTS"
+bucket_name = "wr3-prod-artifacts"
+
+[[r2_buckets]]
+binding = "WR3_BACKUPS"
+bucket_name = "wr3-prod-backups"

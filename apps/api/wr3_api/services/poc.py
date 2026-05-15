@@ -59,13 +59,14 @@ class FoundryPocWorker:
     def record_result(self, record: AuditRecord, result: PocWorkerResult, candidates: list[Finding]) -> None:
         if result.error:
             record.limitations.append(result.error)
+        artifact_uri = result.artifact_uri or self._store_status_artifact(record, result, candidates)
         record.engine_runs.append(
             EngineRunSummary(
                 audit_id=record.audit_id,
                 engine=self.name,
                 status=result.status,
                 duration_ms=result.duration_ms,
-                artifact_uri=result.artifact_uri,
+                artifact_uri=artifact_uri,
                 error=result.error,
             )
         )
@@ -80,11 +81,38 @@ class FoundryPocWorker:
                     "candidate_ids": [finding.id for finding in candidates],
                     "attempts": result.attempts,
                     "confirmed_finding_ids": list(result.confirmed_finding_ids),
-                    "artifact_private": result.artifact_uri is not None,
+                    "artifact_private": artifact_uri is not None,
+                    "artifact_uri": artifact_uri,
                     "error": result.error,
                 },
             )
         )
+
+    def _store_status_artifact(
+        self,
+        record: AuditRecord,
+        result: PocWorkerResult,
+        candidates: list[Finding],
+    ) -> str | None:
+        try:
+            artifact = self._artifact_vault.store_json(
+                audit_id=str(record.audit_id),
+                kind="poc",
+                payload={
+                    "worker": self.name,
+                    "status": result.status,
+                    "reason": result.error,
+                    "attempts": result.attempts,
+                    "candidate_ids": [finding.id for finding in candidates],
+                    "confirmed_finding_ids": list(result.confirmed_finding_ids),
+                    "mode": "localhost_safe_status_artifact",
+                },
+                private=True,
+            )
+            return artifact.uri
+        except ArtifactEncryptionRequired:
+            record.limitations.append("poc_status_artifact_requires_encryption")
+            return None
 
     def _skipped(
         self,

@@ -47,6 +47,10 @@ boundaries, with external provider execution disabled unless configured.
 - Local deterministic RAG scaffold plus optional pgvector schema.
 - News-source registry, DeFiLlama-like incident normalization, and dedup
   scaffold.
+- Free API integration status endpoint for Etherscan V2, RPC fallback,
+  Telegram, OpenRouter, Solodit, billing, monitoring, and Solana providers.
+- DeFiLlama Hacks no-key fetch endpoint for local news/security-intelligence
+  smoke tests.
 - Postgres backup/restore scripts for the Oracle-to-Hetzner portability path,
   with optional encryption and R2-compatible upload.
 - Tier-based retention sweep command and Celery task.
@@ -104,6 +108,7 @@ Run checks:
 ```bash
 npm run check
 npm run benchmark:mvp
+npm run production:readiness
 ```
 
 For the fuller implementation map, see:
@@ -114,8 +119,10 @@ For the fuller implementation map, see:
 - `docs/V1_1_REMAINING_CHECKLIST.md`
 - `docs/ZERO_COST_RESOURCE_PLAN.md`
 - `docs/FREE_ACCOUNT_SETUP_CHECKLIST.md`
+- `docs/PRODUCTION_READINESS.md`
 - `docs/FREE_DATASET_ACQUISITION.md`
 - `docs/FREE_LEGAL_RESOURCE_MAP.md`
+- `docs/API_INTEGRATIONS_FREE.md`
 - `docs/PRODUCTION_DEPLOYMENT.md`
 - `docs/OBSERVABILITY.md`
 - `docs/SAFETY.md`

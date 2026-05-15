@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from wr3_api.core.config import get_settings
 from wr3_api.domain.enums import Tier
 from wr3_api.domain.schemas import AuditEvent, AuditRecord, EngineRunSummary, Finding
+from wr3_api.services.artifacts import ArtifactEncryptionRequired, ArtifactVault
 from wr3_api.services.sandbox import SandboxPolicy
 
 
@@ -33,6 +34,7 @@ class FuzzingWorker:
             allowed_rpc_hosts=settings.sandbox_allowed_rpc_hosts,
             timeout_seconds=settings.sandbox_default_timeout_seconds,
         )
+        self._artifact_vault = ArtifactVault()
 
     def should_consider(self, record: AuditRecord) -> bool:
         return record.request.requested_depth == "deep"
@@ -65,13 +67,14 @@ class FuzzingWorker:
     def record_result(self, record: AuditRecord, result: FuzzWorkerResult) -> None:
         if result.error:
             record.limitations.append(result.error)
+        artifact_uri = result.artifact_uri or self._store_status_artifact(record, result)
         record.engine_runs.append(
             EngineRunSummary(
                 audit_id=record.audit_id,
                 engine=self.name,
                 status=result.status,
                 duration_ms=result.duration_ms,
-                artifact_uri=result.artifact_uri,
+                artifact_uri=artifact_uri,
                 error=result.error,
             )
         )
@@ -84,11 +87,33 @@ class FuzzingWorker:
                     "status": result.status,
                     "finding_count": result.finding_count,
                     "engines_considered": list(result.engines_considered),
-                    "artifact_private": result.artifact_uri is not None,
+                    "artifact_private": artifact_uri is not None,
+                    "artifact_uri": artifact_uri,
                     "error": result.error,
                 },
             )
         )
+
+    def _store_status_artifact(self, record: AuditRecord, result: FuzzWorkerResult) -> str | None:
+        try:
+            artifact = self._artifact_vault.store_json(
+                audit_id=str(record.audit_id),
+                kind="fuzzer_counterexample",
+                payload={
+                    "worker": self.name,
+                    "status": result.status,
+                    "reason": result.error,
+                    "finding_count": result.finding_count,
+                    "engines_considered": list(result.engines_considered),
+                    "counterexample_analysis": "not_available_in_skipped_or_stubbed_localhost_run",
+                    "mode": "localhost_safe_status_artifact",
+                },
+                private=True,
+            )
+            return artifact.uri
+        except ArtifactEncryptionRequired:
+            record.limitations.append("fuzzing_status_artifact_requires_encryption")
+            return None
 
     def _skipped(
         self,

@@ -7,7 +7,7 @@ const labels: Record<string, string> = {
   centralization_score: "Централизация",
   liquidity_score: "Ликвидность",
   team_kyc_score: "Команда/KYC",
-  behavior_score: "On-chain поведение"
+  behavior_score: "Поведение в сети"
 };
 
 export function ScorePanel({ score }: { score: ScoreBreakdown | null }) {
@@ -52,7 +52,7 @@ export function ScorePanel({ score }: { score: ScoreBreakdown | null }) {
         ))}
       </div>
       {score.caps_applied.length > 0 ? (
-        <div className="caps">Ограничения score: {score.caps_applied.map(tCap).join(", ")}</div>
+        <div className="caps">Ограничения оценки: {score.caps_applied.map(tCap).join(", ")}</div>
       ) : null}
     </section>
   );

@@ -25,6 +25,8 @@ def test_sandbox_rejects_foundry_ffi_and_path_escape():
     policy = SandboxPolicy()
 
     assert policy.validate_argv(["forge", "test", "--ffi"]).reason == "sandbox_rejected_flag:--ffi"
+    assert policy.validate_argv(["forge", "script", "--broadcast"]).allowed is False
+    assert policy.validate_argv(["forge", "test", "--private-key", "0xabc"]).reason == "sandbox_rejected_flag:--private-key"
     assert (
         policy.validate_argv(["forge", "test", "--match-path", "../secret.t.sol"]).reason
         == "sandbox_rejected_path_escape"
