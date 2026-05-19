@@ -38,6 +38,22 @@ export const evidenceSchema = z.object({
   fuzzer_counterexample_uri: z.string().nullable()
 });
 
+export const disclosureAssessmentSchema = z.object({
+  verdict: z.string(),
+  verdict_label: z.string(),
+  readiness: z.string(),
+  readiness_label: z.string(),
+  can_contact_support: z.boolean(),
+  false_positive_risk: z.string(),
+  plain_explanation: z.string(),
+  technical_explanation: z.string(),
+  next_step: z.string(),
+  manual_checklist: z.array(z.string()),
+  evidence_gaps: z.array(z.string()),
+  location_status: z.string(),
+  location_label: z.string()
+});
+
 export const findingSchema = z.object({
   id: z.string(),
   audit_id: z.string(),
@@ -55,7 +71,22 @@ export const findingSchema = z.object({
   impact: z.string(),
   recommendation: z.string(),
   dismissal_reason: z.string().nullable(),
-  human_review_status: z.enum(humanReviewStatuses)
+  human_review_status: z.enum(humanReviewStatuses),
+  disclosure_assessment: disclosureAssessmentSchema.default({
+    verdict: "too_early",
+    verdict_label: "Рано писать",
+    readiness: "signal",
+    readiness_label: "Сигнал",
+    can_contact_support: false,
+    false_positive_risk: "high",
+    plain_explanation: "Это предварительный сигнал. Перед обращением нужна ручная проверка.",
+    technical_explanation: "Детали ещё не рассчитаны.",
+    next_step: "Проверить сигнал вручную и собрать доказательства.",
+    manual_checklist: [],
+    evidence_gaps: [],
+    location_status: "unknown",
+    location_label: "Точное место не определено"
+  })
 });
 
 export const scoreBreakdownSchema = z.object({
@@ -82,6 +113,22 @@ export const auditAccessSummarySchema = z.object({
   can_view_private_findings: z.boolean(),
   can_view_raw_outputs: z.boolean(),
   auth_provider: z.string().nullable()
+});
+
+export const securityAgentSummarySchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  status: z.string(),
+  status_label: z.string(),
+  provider_invoked: z.boolean(),
+  fallback: z.string(),
+  error_type: z.string().nullable(),
+  agent_roles: z.array(z.string()),
+  agent_payloads_received: z.array(z.string()),
+  zdr_required: z.boolean(),
+  prompt_wrapped_untrusted_source: z.boolean(),
+  explanation: z.string(),
+  recommendation: z.string()
 });
 
 export const proxyInfoSchema = z.object({
@@ -160,6 +207,22 @@ export const auditSummarySchema = z.object({
   failed_stages: z.array(z.string()),
   engine_version: z.string(),
   score_version: z.string(),
+  static_analysis_status: z.string().default("not_started"),
+  security_agent: securityAgentSummarySchema.default({
+    provider: "disabled",
+    model: "local-deterministic-triage",
+    status: "not_started",
+    status_label: "ИИ-агент ещё не запускался",
+    provider_invoked: false,
+    fallback: "not_started",
+    error_type: null,
+    agent_roles: [],
+    agent_payloads_received: [],
+    zdr_required: true,
+    prompt_wrapped_untrusted_source: false,
+    explanation: "Пока findings создают статические инструменты и локальные эвристики.",
+    recommendation: "Для глубокого режима подключи платную ZDR/local модель в WR3_LLM_MODEL."
+  }),
   source_metadata: sourceMetadataSchema.default({
     source_hash: null,
     source_origin: "unknown",
@@ -193,9 +256,11 @@ export type ContractRef = z.infer<typeof contractRefSchema>;
 export type SourceLocation = z.infer<typeof sourceLocationSchema>;
 export type Taxonomy = z.infer<typeof taxonomySchema>;
 export type Evidence = z.infer<typeof evidenceSchema>;
+export type DisclosureAssessment = z.infer<typeof disclosureAssessmentSchema>;
 export type Finding = z.infer<typeof findingSchema>;
 export type ScoreBreakdown = z.infer<typeof scoreBreakdownSchema>;
 export type AuditAccessSummary = z.infer<typeof auditAccessSummarySchema>;
+export type SecurityAgentSummary = z.infer<typeof securityAgentSummarySchema>;
 export type ProxyInfo = z.infer<typeof proxyInfoSchema>;
 export type SourceMetadata = z.infer<typeof sourceMetadataSchema>;
 export type AuditInput = z.infer<typeof auditInputSchema>;

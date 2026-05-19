@@ -28,6 +28,7 @@ import {
   XCircle
 } from "lucide-react";
 import type { AuditState, Chain, Severity, Tier } from "@wr3/shared";
+import { ScoutClient } from "@/components/ScoutClient";
 import {
   appendDisclosureContact,
   createAudit,
@@ -35,6 +36,7 @@ import {
   getToolsStatus,
   listAudits,
   listDisclosureCases,
+  retryAudit,
   type DashboardAudit,
   type DisclosureCase,
   type ToolsStatusResponse
@@ -69,12 +71,21 @@ type FindingTask = {
   note: string;
   legalGate: "clear" | "review" | "blocked";
   nextStep: string;
+  verdict: string;
+  verdictLabel: string;
+  readinessLabel: string;
+  explanation: string;
+  evidenceGaps: string[];
+  falsePositiveRisk: string;
+  canCreateDisclosure: boolean;
+  primaryFindingId: string | null;
 };
 
-type CockpitTab = "scan" | "findings" | "disclosure" | "engine" | "links";
+type CockpitTab = "scan" | "scout" | "findings" | "disclosure" | "engine" | "links";
 
 const cockpitTabs: { id: CockpitTab; label: string; description: string; icon: LucideIcon }[] = [
   { id: "scan", label: "Скан", description: "адрес или код", icon: Radar },
+  { id: "scout", label: "24/7 Scout", description: "цели из сетей", icon: Activity },
   { id: "findings", label: "Очередь багов", description: "проверка кандидатов", icon: Bug },
   { id: "disclosure", label: "Обращение", description: "канал и отчёт", icon: Send },
   { id: "engine", label: "Движок", description: "инструменты и здоровье", icon: Cpu },
@@ -148,6 +159,8 @@ const depths: { value: "preliminary" | "standard" | "deep"; label: string }[] = 
 ];
 
 function defaultTaskStatus(audit: DashboardAudit): TaskStatus {
+  if (audit.primary_verdict === "can_write") return "report_draft";
+  if (audit.primary_verdict === "do_not_write") return "dismissed";
   if (audit.state === "failed") return "blocked";
   if (audit.highest_severity === "critical" || audit.highest_severity === "high") return "needs_validation";
   if (audit.finding_count > 0) return "candidate";
@@ -158,7 +171,7 @@ function defaultTaskStatus(audit: DashboardAudit): TaskStatus {
 function taskTitle(audit: DashboardAudit) {
   const severity = audit.highest_severity ? severityLabels[audit.highest_severity] : "кандидат";
   const address = audit.address ? shortAddress(audit.address) : shortAddress(audit.audit_id);
-  return `${severity} · ${chainLabels[audit.chain]} · ${address}`;
+  return audit.primary_finding_title || `${severity} · ${chainLabels[audit.chain]} · ${address}`;
 }
 
 function loadOverrides(): Record<string, TaskOverride> {
@@ -212,7 +225,15 @@ function buildTasks(audits: DashboardAudit[], overrides: Record<string, TaskOver
         assignee: override.assignee ?? "Не назначено",
         note: override.note ?? "",
         legalGate: "clear",
-        nextStep: statusNext[status]
+        nextStep: audit.primary_next_step || statusNext[status],
+        verdict: audit.primary_verdict,
+        verdictLabel: audit.primary_verdict_label,
+        readinessLabel: audit.primary_readiness_label,
+        explanation: audit.primary_explanation,
+        evidenceGaps: audit.primary_evidence_gaps,
+        falsePositiveRisk: audit.primary_false_positive_risk,
+        canCreateDisclosure: audit.can_create_disclosure,
+        primaryFindingId: audit.primary_finding_id,
       };
       task.legalGate = legalGateFor(task);
       return task;
@@ -294,6 +315,7 @@ export function InternalCommandCenter() {
 
   const tabCounters: Record<CockpitTab, string | number> = {
     scan: "старт",
+    scout: "авто",
     findings: metrics.openTasks,
     disclosure: metrics.legalBlockers,
     engine: `${engineHealth}%`,
@@ -349,6 +371,10 @@ export function InternalCommandCenter() {
               <SafetyWorkflowPanel />
             </div>
           </div>
+        ) : null}
+
+        {activeTab === "scout" ? (
+          <ScoutClient />
         ) : null}
 
         {activeTab === "findings" ? (
@@ -752,6 +778,7 @@ function TaskDetail({
   const [caseStatus, setCaseStatus] = useState<string | null>(null);
   const [caseError, setCaseError] = useState<string | null>(null);
   const [isCreatingCase, setIsCreatingCase] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   useEffect(() => {
     setDraftNote(task?.note ?? "");
@@ -778,12 +805,16 @@ function TaskDetail({
 
   async function createSupportCase() {
     setCaseError(null);
+    if (!activeTask.canCreateDisclosure || !activeTask.primaryFindingId) {
+      setCaseError("Рано создавать disclosure: не хватает подтверждения, точной location или сильного static+AI/PoC сигнала.");
+      return;
+    }
     setIsCreatingCase(true);
     try {
       const created = await createDisclosureCase({
-        finding_id: activeTask.id,
+        finding_id: activeTask.primaryFindingId,
         project_contact: supportContact,
-        scope_note: `Внутренняя кандидатная задача wr3. ${activeTask.nextStep} Без активных mainnet-действий.`
+        scope_note: `Внутренняя кандидатная задача wr3. Вердикт: ${activeTask.verdictLabel}. ${activeTask.nextStep} Без активных mainnet-действий.`
       });
       await appendDisclosureContact(created.id, {
         channel: "draft",
@@ -798,6 +829,39 @@ function TaskDetail({
     }
   }
 
+  async function retrySelectedAudit() {
+    setCaseError(null);
+    setIsRetrying(true);
+    try {
+      if (activeTask.audit.state === "completed") {
+        if (!activeTask.audit.address) {
+          throw new Error("Для повторного прогона source-only аудита нужно запустить новый скан через вкладку “Скан”.");
+        }
+        const created = await createAudit({
+          chain: activeTask.audit.chain,
+          address: activeTask.audit.address,
+          source: "",
+          allow_bytecode_only: true,
+          requested_depth: activeTask.audit.requested_depth,
+          visibility: "private",
+          user_intent: "pre_launch_self_check",
+          tier: activeTask.audit.tier
+        });
+        onPatch(activeTask.id, { status: "needs_validation", note: `${draftNote}\nСоздан новый прогон: ${created.audit_id}.`.trim() });
+        setCaseStatus("Создан новый прогон скана. Открываю новый отчёт.");
+        window.location.href = `/audits/${created.audit_id}?owner_token=${encodeURIComponent(created.owner_access_token)}`;
+        return;
+      }
+      await retryAudit(activeTask.audit.audit_id, activeTask.audit.owner_access_token ?? undefined);
+      onPatch(activeTask.id, { status: "needs_validation", note: `${draftNote}\nПовторная проверка запрошена.`.trim() });
+      setCaseStatus("Повторная проверка запрошена. Обнови очередь через несколько секунд.");
+    } catch (err) {
+      setCaseError(err instanceof Error ? err.message : "Повторная проверка не запустилась");
+    } finally {
+      setIsRetrying(false);
+    }
+  }
+
   return (
     <section className="cockpit-panel cockpit-detail">
       <div className="cockpit-panel-head">
@@ -809,6 +873,14 @@ function TaskDetail({
       </div>
 
       <dl className="cockpit-detail-grid">
+        <div>
+          <dt>Вердикт</dt>
+          <dd>{task.verdictLabel}</dd>
+        </div>
+        <div>
+          <dt>Готовность</dt>
+          <dd>{task.readinessLabel}</dd>
+        </div>
         <div>
           <dt>Аудит</dt>
           <dd><Link href={href}>{shortAddress(task.audit.audit_id)}</Link></dd>
@@ -825,28 +897,45 @@ function TaskDetail({
           <dt>Находки</dt>
           <dd>{task.audit.finding_count}</dd>
         </div>
+        <div>
+          <dt>FP risk</dt>
+          <dd>{task.falsePositiveRisk}</dd>
+        </div>
       </dl>
 
+      <article className={`finding-verdict finding-verdict-${task.verdict}`}>
+        {task.canCreateDisclosure ? <CheckCircle2 aria-hidden="true" size={18} /> : <ShieldAlert aria-hidden="true" size={18} />}
+        <div>
+          <strong>{task.verdictLabel}</strong>
+          <span>{task.explanation}</span>
+        </div>
+      </article>
+
+      {task.evidenceGaps.length ? (
+        <article className="evidence-gap-box">
+          <strong>Чего не хватает перед письмом</strong>
+          <ul>
+            {task.evidenceGaps.map((gap) => <li key={gap}>{gap}</li>)}
+          </ul>
+        </article>
+      ) : null}
+
       <div className="task-action-grid">
-        <button type="button" onClick={() => onPatch(task.id, { status: "validated" })}>
-          <CheckCircle2 aria-hidden="true" size={16} />
-          Проверено
-        </button>
-        <button type="button" className="secondary-button" onClick={() => onPatch(task.id, { status: "reproducing" })}>
-          <Play aria-hidden="true" size={16} />
-          Запустить PoC
-        </button>
-        <button type="button" className="secondary-button" onClick={() => onPatch(task.id, { status: "report_draft" })}>
+        <Link className="button-like" href={href}>
           <FileText aria-hidden="true" size={16} />
-          Создать отчёт
-        </button>
+          Полный audit
+        </Link>
         <button type="button" className="secondary-button danger-button" onClick={() => onPatch(task.id, { status: "dismissed" })}>
           <XCircle aria-hidden="true" size={16} />
           Отклонить FP
         </button>
-        <button type="button" className="secondary-button" onClick={createSupportCase} disabled={isCreatingCase}>
+        <button type="button" className="secondary-button" onClick={retrySelectedAudit} disabled={isRetrying}>
+          {isRetrying ? <Loader2 className="spin" aria-hidden="true" size={16} /> : <RefreshCw aria-hidden="true" size={16} />}
+          Повторить скан
+        </button>
+        <button type="button" className="secondary-button" onClick={createSupportCase} disabled={isCreatingCase || !task.canCreateDisclosure}>
           {isCreatingCase ? <Loader2 className="spin" aria-hidden="true" size={16} /> : <Send aria-hidden="true" size={16} />}
-          Черновик письма
+          Создать disclosure case
         </button>
       </div>
 
@@ -879,6 +968,8 @@ function TaskDetail({
         <span>Черновик баг-репорта</span>
         <pre>{`Название: ${task.title}
 Статус: ${statusLabels[task.status]}
+Вердикт: ${task.verdictLabel}
+Готовность: ${task.readinessLabel}
 Scope: ${chainLabels[task.audit.chain]}:${task.audit.address ?? task.audit.audit_id}
 Безопасность: только local/fork/test, без mainnet-действий.
 Следующий шаг: ${task.nextStep}
@@ -1018,6 +1109,7 @@ function QuickLinksPanel() {
       </div>
       <div className="quick-link-grid">
         <Link href="/dashboard">Все аудиты</Link>
+        <Link href="/scout">24/7 Scout</Link>
         <Link href="/tools">Инструменты</Link>
         <Link href="/integrations">API-статус</Link>
         <Link href="/tg">Mini App</Link>
@@ -1039,6 +1131,8 @@ wr3 отметил кандидатную security-проблему:
 - Сеть: ${chainLabels[task.audit.chain]}
 - Контракт / цель: ${task.audit.address ?? task.audit.audit_id}
 - Текущая severity кандидата: ${task.severity === "none" ? "неизвестно" : severityLabels[task.severity]}
+- Вердикт wr3: ${task.verdictLabel}
+- Готовность: ${task.readinessLabel}
 - Статус проверки: ${statusLabels[task.status]}
 
 Важное про безопасность:
@@ -1049,6 +1143,9 @@ wr3 отметил кандидатную security-проблему:
 
 Текущая сводка доказательств:
 ${task.note || "TODO: добавить ручную проверку, local/fork/test воспроизведение и impact statement."}
+
+Чего ещё не хватает:
+${task.evidenceGaps.length ? task.evidenceGaps.map((gap) => `- ${gap}`).join("\n") : "- Базовый evidence checklist закрыт."}
 
 Следующий шаг:
 Пожалуйста, подтвердите правильный security contact / bounty scope для этой цели. После ручной проверки мы можем отправить короткий технический отчёт.

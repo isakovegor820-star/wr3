@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
+import { AuditActionSummary } from "@/components/AuditActionSummary";
+import { AuditInterpretationPanel } from "@/components/AuditInterpretationPanel";
 import { ReportTabs } from "@/components/ReportTabs";
 import { ScorePanel } from "@/components/ScorePanel";
 import { StageTimeline } from "@/components/StageTimeline";
@@ -72,7 +74,14 @@ export default async function AuditPage({
         <div className="progress-pill">{audit.progress}%</div>
       </header>
 
-      <StageTimeline state={audit.state} failedStages={audit.failed_stages} limitations={audit.limitations} />
+      <StageTimeline
+        state={audit.state}
+        failedStages={audit.failed_stages}
+        limitations={audit.limitations}
+        staticAnalysisStatus={audit.static_analysis_status}
+      />
+      <AuditActionSummary audit={audit} findings={findings} />
+      <AuditInterpretationPanel audit={audit} findings={findings} />
       <ScorePanel score={audit.score} />
       <section className="panel access-panel">
         <div>

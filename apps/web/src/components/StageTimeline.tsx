@@ -16,11 +16,13 @@ const order = stages.map((stage) => stage.state);
 export function StageTimeline({
   state,
   failedStages,
-  limitations
+  limitations,
+  staticAnalysisStatus = "not_started"
 }: {
   state: AuditState;
   failedStages: string[];
   limitations: string[];
+  staticAnalysisStatus?: string;
 }) {
   const currentIndex = order.indexOf(state);
   const isTerminalFailure = state === "failed" || state === "rejected";
@@ -39,21 +41,34 @@ export function StageTimeline({
     <ol className="stage-grid" aria-label="Прогресс аудита">
       {stages.map((stage, index) => {
         const skipped = skipsHeavyStages && (stage.state === "poc_running" || stage.state === "fuzzing_running");
+        const partial = stage.state === "static_running" && staticAnalysisStatus === "partial";
         const complete = state === "completed" || (currentIndex >= 0 && index < currentIndex);
         const active = stage.state === state || (state === "partial" && index >= 1);
-        const failed = isTerminalFailure || failedStages.some((item) => item.includes(stage.state.split("_")[0]));
-        const Icon = failed ? X : skipped ? Minus : complete ? Check : Clock;
+        const failed =
+          isTerminalFailure ||
+          (stage.state === "static_running"
+            ? staticAnalysisStatus === "failed"
+            : failedStages.some((item) => item.includes(stage.state.split("_")[0])));
+        const Icon = failed ? X : skipped || partial ? Minus : complete ? Check : Clock;
         return (
           <li
             key={stage.state}
             className={
-              skipped ? "stage stage-skipped" : complete ? "stage stage-complete" : active ? "stage stage-active" : "stage"
+              partial
+                ? "stage stage-partial"
+                : skipped
+                  ? "stage stage-skipped"
+                  : complete
+                    ? "stage stage-complete"
+                    : active
+                      ? "stage stage-active"
+                      : "stage"
             }
           >
-            <span className={failed ? "stage-icon stage-icon-failed" : skipped ? "stage-icon stage-icon-skipped" : "stage-icon"}>
+            <span className={failed ? "stage-icon stage-icon-failed" : skipped || partial ? "stage-icon stage-icon-skipped" : "stage-icon"}>
               <Icon aria-hidden="true" size={15} />
             </span>
-            <span>{skipped ? `${stage.label}: пропущено` : stage.label}</span>
+            <span>{partial ? `${stage.label}: частично` : skipped ? `${stage.label}: пропущено` : stage.label}</span>
           </li>
         );
       })}

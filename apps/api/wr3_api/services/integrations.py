@@ -100,6 +100,18 @@ class IntegrationStatusService:
                 notes=["Приватные находки и исходники нельзя отправлять non-ZDR провайдерам."],
             ),
             IntegrationDescriptor(
+                id="navy_ai",
+                label="NavyAI / Claude Opus 4.7",
+                priority="P0",
+                category="llm_triage",
+                status="configured" if s.navy_api_key and s.llm_provider == "navy" else "disabled",
+                free_mode="Единый OpenAI-compatible endpoint; конкретная модель может требовать paid/Max plan.",
+                used_by=["4-agent ИИ-триаж", "security reasoning в локальном/закрытом режиме"],
+                env_vars=["WR3_LLM_PROVIDER=navy", "WR3_LLM_MODEL=claude-opus-4.7", "WR3_NAVY_API_KEY"],
+                next_step="Использовать для локальных тестов; перед public/paid launch оставить ZDR/local route для private findings.",
+                notes=["Каталог Navy помечает claude-opus-4.7 как premium Max.", "ZDR для Navy не подтверждён в документации."],
+            ),
+            IntegrationDescriptor(
                 id="solodit",
                 label="Solodit API",
                 priority="P0",

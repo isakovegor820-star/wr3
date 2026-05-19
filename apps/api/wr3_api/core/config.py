@@ -56,9 +56,13 @@ class Settings(BaseSettings):
     llm_zdr_required: bool = True
     llm_timeout_seconds: float = 25.0
     openrouter_api_key: str | None = None
+    navy_api_key: str | None = None
+    navy_base_url: str = "https://api.navy/v1"
     solodit_api_base_url: str | None = None
     solodit_api_key: str | None = None
     defillama_hacks_url: str = "https://api.llama.fi/hacks"
+    defillama_protocols_url: str = "https://api.llama.fi/protocols"
+    scout_default_interval_seconds: int = 900
     rsshub_base_url: str | None = None
     helius_api_key: str | None = None
     helius_rpc_url: str | None = None

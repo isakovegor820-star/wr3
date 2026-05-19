@@ -1,7 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from wr3_api.api.routes import audits, auth, billing, disclosure, health, integrations, news, notifications, projects, telegram, tools
+from wr3_api.api.routes import (
+    audits,
+    auth,
+    billing,
+    disclosure,
+    health,
+    integrations,
+    monitoring,
+    news,
+    notifications,
+    projects,
+    telegram,
+    tools,
+)
 from wr3_api.core.config import get_settings
 
 
@@ -22,6 +35,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(integrations.router)
+    app.include_router(monitoring.router)
     app.include_router(news.router)
     app.include_router(auth.router)
     app.include_router(billing.router)

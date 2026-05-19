@@ -116,6 +116,18 @@ export type DashboardAudit = {
   project_key: string;
   created_at: string;
   updated_at: string;
+  static_analysis_status: string;
+  primary_finding_id: string | null;
+  primary_finding_title: string | null;
+  primary_verdict: string;
+  primary_verdict_label: string;
+  primary_readiness: string;
+  primary_readiness_label: string;
+  primary_next_step: string;
+  primary_explanation: string;
+  primary_false_positive_risk: string;
+  primary_evidence_gaps: string[];
+  can_create_disclosure: boolean;
 };
 
 export type BillingPlan = {
@@ -166,6 +178,73 @@ export type WatchlistEntry = {
   alert_channels: string[];
   status: string;
   created_at: string;
+  limitations: string[];
+};
+
+export type ScoutTarget = {
+  source: string;
+  protocol_name: string;
+  slug: string;
+  category: string | null;
+  chain: Chain;
+  address: string;
+  tvl_usd: number | null;
+  official_url: string | null;
+  twitter_url: string | null;
+  security_txt_url: string | null;
+  security_email_guess: string | null;
+  contact_instructions: string[];
+  limitations: string[];
+};
+
+export type ScoutQueuedAudit = {
+  audit_id: string;
+  owner_access_token: string;
+  chain: Chain;
+  address: string;
+  protocol_name: string;
+  status_url: string;
+  report_url: string;
+  limitations: string[];
+};
+
+export type ScoutRunResult = {
+  source: string;
+  discovered_count: number;
+  queued_count: number;
+  skipped_count: number;
+  targets: ScoutTarget[];
+  audits: ScoutQueuedAudit[];
+  limitations: string[];
+};
+
+export type ScoutReviewItem = {
+  bucket: "ready_to_write" | "needs_validation" | "skip" | string;
+  action_label: string;
+  audit_id: string;
+  owner_access_token: string | null;
+  chain: Chain;
+  address: string | null;
+  state: AuditState;
+  score: number | null;
+  finding_count: number;
+  highest_severity: Severity | null;
+  primary_title: string | null;
+  verdict_label: string;
+  readiness_label: string;
+  can_contact_support: boolean;
+  why: string;
+  next_step: string;
+  evidence_gaps: string[];
+  support_route: string[];
+  report_url: string;
+};
+
+export type ScoutReviewQueue = {
+  ready_to_write: ScoutReviewItem[];
+  needs_validation: ScoutReviewItem[];
+  skip: ScoutReviewItem[];
+  totals: Record<string, number>;
   limitations: string[];
 };
 
@@ -307,6 +386,64 @@ export async function getToolsStatus(): Promise<ToolsStatusResponse> {
 
 export async function getIntegrationStatus(): Promise<IntegrationStatusResponse> {
   return apiFetch("/v1/integrations/status");
+}
+
+export async function discoverScoutTargets(filters: {
+  limit?: number;
+  min_tvl_usd?: number;
+  chain?: Chain | "";
+} = {}): Promise<ScoutTarget[]> {
+  const params = new URLSearchParams();
+  params.set("limit", String(filters.limit ?? 10));
+  if (filters.min_tvl_usd) params.set("min_tvl_usd", String(filters.min_tvl_usd));
+  if (filters.chain) params.append("chain", filters.chain);
+  return apiFetch(`/v1/monitoring/targets?${params.toString()}`);
+}
+
+export async function runScoutOnce(input: {
+  limit?: number;
+  min_tvl_usd?: number;
+  chains?: Chain[];
+  dry_run?: boolean;
+  requested_depth?: "preliminary" | "standard" | "deep";
+  tier?: Tier;
+}): Promise<ScoutRunResult> {
+  return apiFetch("/v1/monitoring/scout/run-once", {
+    method: "POST",
+    body: JSON.stringify({
+      limit: input.limit ?? 5,
+      min_tvl_usd: input.min_tvl_usd ?? 0,
+      chains: input.chains ?? [],
+      dry_run: input.dry_run ?? false,
+      requested_depth: input.requested_depth ?? "preliminary",
+      tier: input.tier ?? "free"
+    })
+  });
+}
+
+export async function runScoutAllNetworks(input: {
+  per_chain_limit?: number;
+  min_tvl_usd?: number;
+  chains?: Chain[];
+  dry_run?: boolean;
+  requested_depth?: "preliminary" | "standard" | "deep";
+  tier?: Tier;
+}): Promise<ScoutRunResult> {
+  return apiFetch("/v1/monitoring/scout/run-all", {
+    method: "POST",
+    body: JSON.stringify({
+      per_chain_limit: input.per_chain_limit ?? 3,
+      min_tvl_usd: input.min_tvl_usd ?? 0,
+      chains: input.chains ?? [],
+      dry_run: input.dry_run ?? false,
+      requested_depth: input.requested_depth ?? "deep",
+      tier: input.tier ?? "team"
+    })
+  });
+}
+
+export async function getScoutReviewQueue(limit = 100): Promise<ScoutReviewQueue> {
+  return apiFetch(`/v1/monitoring/review-queue?limit=${limit}`);
 }
 
 export async function telegramEmulatorCommand(command: string, telegramUserId = 1508): Promise<TelegramEmulatorResponse> {

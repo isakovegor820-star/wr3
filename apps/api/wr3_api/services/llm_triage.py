@@ -54,7 +54,8 @@ class LlmTriageRouter:
                 zdr_required=settings.llm_zdr_required,
                 limitations=limitations,
             )
-        if settings.llm_provider == "openrouter" and not settings.openrouter_api_key:
+        provider = settings.llm_provider.lower()
+        if provider == "openrouter" and not settings.openrouter_api_key:
             limitations.append("openrouter_api_key_missing_using_deterministic_fallback")
             return LlmTriageRoute(
                 provider="openrouter",
@@ -63,11 +64,31 @@ class LlmTriageRouter:
                 zdr_required=settings.llm_zdr_required,
                 limitations=limitations,
             )
-        if settings.llm_provider == "openrouter":
+        if provider == "navy" and not settings.navy_api_key:
+            limitations.append("navy_api_key_missing_using_deterministic_fallback")
+            return LlmTriageRoute(
+                provider="navy",
+                model=settings.llm_model,
+                enabled=False,
+                zdr_required=settings.llm_zdr_required,
+                limitations=limitations,
+            )
+        if provider == "openrouter":
             if settings.llm_zdr_required:
                 limitations.append("openrouter_zdr_route_requested")
             return LlmTriageRoute(
                 provider="openrouter",
+                model=settings.llm_model,
+                enabled=True,
+                zdr_required=settings.llm_zdr_required,
+                limitations=limitations,
+            )
+        if provider == "navy":
+            limitations.append("navy_route_requested")
+            if settings.llm_zdr_required:
+                limitations.append("navy_zdr_not_confirmed_using_configured_provider")
+            return LlmTriageRoute(
+                provider="navy",
                 model=settings.llm_model,
                 enabled=True,
                 zdr_required=settings.llm_zdr_required,
@@ -100,7 +121,7 @@ class LlmTriageRouter:
             )
         try:
             prompt = self.build_prompt_preview(record, source)
-            agent_payloads = await self._call_openrouter_agents(selected_route, prompt)
+            agent_payloads = await self._call_provider_agents(selected_route, prompt)
             findings = record.findings
             for payload in agent_payloads.values():
                 findings = self.apply_decision_payload(findings, payload)
@@ -112,12 +133,16 @@ class LlmTriageRouter:
                 agent_payloads=agent_payloads,
             )
         except Exception as exc:
+            error_type = exc.__class__.__name__
+            if isinstance(exc, httpx.HTTPStatusError):
+                error_type = f"HTTPStatusError:{exc.response.status_code}"
+                limitations.append(f"llm_triage_provider_http_{exc.response.status_code}_using_deterministic_fallback")
             limitations.append("llm_triage_provider_error_using_deterministic_fallback")
             return LlmTriageResult(
                 findings=fallback(record.findings),
                 route=selected_route,
                 provider_invoked=True,
-                error_type=exc.__class__.__name__,
+                error_type=error_type,
                 limitations=limitations,
             )
 
@@ -177,20 +202,42 @@ class LlmTriageRouter:
                 by_id[finding_id] = by_id[finding_id].model_copy(update=updates)
         return [by_id[finding.id] for finding in findings]
 
-    async def _call_openrouter_agents(
+    async def _call_provider_agents(
         self,
         route: LlmTriageRoute,
         prompt: str,
     ) -> dict[str, dict[str, object]]:
         results = await asyncio.gather(
-            *(self._call_openrouter(route, self._agent_prompt(prompt, agent), agent=agent) for agent in self.agent_roles)
+            *(self._call_provider(route, self._agent_prompt(prompt, agent), agent=agent) for agent in self.agent_roles)
         )
         return dict(zip(self.agent_roles, results, strict=True))
 
-    async def _call_openrouter(self, route: LlmTriageRoute, prompt: str, *, agent: str) -> dict[str, object]:
+    async def _call_provider(self, route: LlmTriageRoute, prompt: str, *, agent: str) -> dict[str, object]:
         settings = get_settings()
-        if not settings.openrouter_api_key:
-            raise RuntimeError("openrouter_api_key_missing")
+        provider = route.provider.lower()
+        if provider == "openrouter":
+            if not settings.openrouter_api_key:
+                raise RuntimeError("openrouter_api_key_missing")
+            api_key = settings.openrouter_api_key
+            url = "https://openrouter.ai/api/v1/chat/completions"
+            extra_headers = {
+                "HTTP-Referer": settings.web_base_url,
+                "X-Title": "wr3-security-triage",
+            }
+            provider_payload: dict[str, object] | None = {
+                "data_collection": "deny",
+                "zdr": route.zdr_required,
+            }
+        elif provider == "navy":
+            if not settings.navy_api_key:
+                raise RuntimeError("navy_api_key_missing")
+            api_key = settings.navy_api_key
+            url = f"{settings.navy_base_url.rstrip('/')}/chat/completions"
+            extra_headers = {}
+            provider_payload = None
+        else:
+            raise RuntimeError(f"unsupported_llm_provider:{route.provider}")
+
         request_body = {
             "model": route.model,
             "messages": [
@@ -204,24 +251,37 @@ class LlmTriageRouter:
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0,
-            "response_format": {"type": "json_object"},
-            "provider": {"data_collection": "deny"},
-            "zdr": route.zdr_required,
+            "max_tokens": 1200,
         }
+        if provider_payload is not None:
+            request_body["provider"] = provider_payload
         async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
             response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
+                url,
                 headers={
-                    "Authorization": f"Bearer {settings.openrouter_api_key}",
-                    "HTTP-Referer": settings.web_base_url,
-                    "X-Title": "wr3-security-triage",
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    **extra_headers,
                 },
                 json=request_body,
             )
             response.raise_for_status()
         data = response.json()
         content = data["choices"][0]["message"]["content"]
-        parsed = json.loads(content)
+        parsed = self._parse_json_object(content)
+        if not isinstance(parsed, dict):
+            raise ValueError("llm_triage_json_object_required")
+        return parsed
+
+    def _parse_json_object(self, content: str) -> dict[str, object]:
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            start = content.find("{")
+            end = content.rfind("}")
+            if start == -1 or end == -1 or end <= start:
+                raise
+            parsed = json.loads(content[start : end + 1])
         if not isinstance(parsed, dict):
             raise ValueError("llm_triage_json_object_required")
         return parsed

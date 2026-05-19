@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from wr3_api.adapters.base import EngineAdapter, EngineRunOptions, EngineRunResult, NormalizedSource, Timer
+from wr3_api.adapters.source_tree import materialize_source_tree
 from wr3_api.domain.enums import Chain, Exploitability, Severity
 from wr3_api.domain.schemas import ContractRef, Evidence, Finding, SourceLocation, Taxonomy
 from wr3_api.services.tool_paths import resolve_tool_binary
@@ -37,13 +38,14 @@ class WakeAdapter(EngineAdapter):
 
         with Timer() as timer:
             with tempfile.TemporaryDirectory(prefix="wr3-wake-") as temp_dir:
-                src_dir = Path(temp_dir) / "contracts"
-                src_dir.mkdir()
-                (src_dir / source.file_name).write_text(source.source, encoding="utf-8")
+                materialize_source_tree(Path(temp_dir), source.source, default_file_name=source.file_name)
                 proc = await asyncio.create_subprocess_exec(
                     binary,
                     "detect",
-                    "--json",
+                    "--ignore-errors",
+                    "--export",
+                    "json",
+                    "all",
                     cwd=temp_dir,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -60,6 +62,12 @@ class WakeAdapter(EngineAdapter):
                         error="wake timed out",
                         duration_ms=timer.duration_ms,
                     )
+                detections_path = Path(temp_dir) / ".wake" / "detections.json"
+                raw = (
+                    detections_path.read_text(encoding="utf-8")
+                    if detections_path.exists()
+                    else stdout.decode(errors="replace")
+                )
 
         if proc.returncode != 0:
             return EngineRunResult(
@@ -70,7 +78,6 @@ class WakeAdapter(EngineAdapter):
                 duration_ms=timer.duration_ms,
             )
 
-        raw = stdout.decode(errors="replace")
         return EngineRunResult(
             engine=self.name,
             status="success",
@@ -85,6 +92,8 @@ class WakeAdapter(EngineAdapter):
         except json.JSONDecodeError:
             return []
         records = payload if isinstance(payload, list) else payload.get("detections", [])
+        if isinstance(records, dict):
+            records = records.get("detections", []) or records.get("results", [])
         findings: list[Finding] = []
         for item in records if isinstance(records, list) else []:
             title = str(item.get("name") or item.get("title") or "Wake finding")

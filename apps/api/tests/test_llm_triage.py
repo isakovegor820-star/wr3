@@ -65,6 +65,51 @@ def test_openrouter_route_enables_only_with_key_and_zdr(monkeypatch):
     get_settings.cache_clear()
 
 
+def test_navy_route_enables_claude_opus_with_key(monkeypatch):
+    monkeypatch.setenv("WR3_LLM_PROVIDER", "navy")
+    monkeypatch.setenv("WR3_LLM_MODEL", "claude-opus-4.7")
+    monkeypatch.setenv("WR3_NAVY_API_KEY", "test-key")
+    get_settings.cache_clear()
+    router = LlmTriageRouter()
+    audit = AuditRecord(
+        request=CreateAuditRequest(
+            chain=Chain.BASE,
+            address="0x0000000000000000000000000000000000000000",
+            source="contract Vault {}",
+        )
+    )
+
+    route = router.route(audit)
+
+    assert route.enabled is True
+    assert route.provider == "navy"
+    assert route.model == "claude-opus-4.7"
+    assert "navy_route_requested" in route.limitations
+    assert "navy_zdr_not_confirmed_using_configured_provider" in route.limitations
+    get_settings.cache_clear()
+
+
+def test_navy_route_falls_back_without_key(monkeypatch):
+    monkeypatch.setenv("WR3_LLM_PROVIDER", "navy")
+    monkeypatch.delenv("WR3_NAVY_API_KEY", raising=False)
+    get_settings.cache_clear()
+    router = LlmTriageRouter()
+    audit = AuditRecord(
+        request=CreateAuditRequest(
+            chain=Chain.BASE,
+            address="0x0000000000000000000000000000000000000000",
+            source="contract Vault {}",
+        )
+    )
+
+    route = router.route(audit)
+
+    assert route.enabled is False
+    assert route.provider == "navy"
+    assert "navy_api_key_missing_using_deterministic_fallback" in route.limitations
+    get_settings.cache_clear()
+
+
 def test_llm_triage_builds_four_agent_prompts():
     router = LlmTriageRouter()
     base_prompt = "Findings: []"
@@ -74,6 +119,14 @@ def test_llm_triage_builds_four_agent_prompts():
     assert len(prompts) == 4
     assert any("severity" in prompt.lower() for prompt in prompts)
     assert all("Return JSON" in prompt for prompt in prompts)
+
+
+def test_llm_triage_extracts_json_from_non_strict_model_text():
+    router = LlmTriageRouter()
+
+    parsed = router._parse_json_object('Sure. {"findings": []} Done.')  # noqa: SLF001
+
+    assert parsed == {"findings": []}
 
 
 def test_llm_decision_payload_can_dismiss_low_confidence_finding():

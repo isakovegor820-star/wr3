@@ -1,5 +1,5 @@
 import type { Finding } from "@wr3/shared";
-import { LockKeyhole, MapPin } from "lucide-react";
+import { CheckCircle2, LockKeyhole, MapPin, ShieldAlert } from "lucide-react";
 import { exploitabilityLabels, severityLabels, tFindingText } from "@/lib/i18n";
 
 const severityOrder = {
@@ -30,11 +30,40 @@ export function FindingsList({ findings }: { findings: Finding[] }) {
           <div className="finding-meta">
             <span>
               <MapPin aria-hidden="true" size={14} />
-              {finding.contract.file ?? "исходник"} {finding.location.start_line ? `:${finding.location.start_line}` : ""}
+              {finding.disclosure_assessment.location_label}
             </span>
             <span>уверенность {Math.round(finding.confidence * 100)}%</span>
             <span>{exploitabilityLabels[finding.exploitability]}</span>
           </div>
+          <div className={`finding-verdict finding-verdict-${finding.disclosure_assessment.verdict}`}>
+            {finding.disclosure_assessment.can_contact_support ? (
+              <CheckCircle2 aria-hidden="true" size={16} />
+            ) : (
+              <ShieldAlert aria-hidden="true" size={16} />
+            )}
+            <div>
+              <strong>{finding.disclosure_assessment.verdict_label}</strong>
+              <span>{finding.disclosure_assessment.next_step}</span>
+            </div>
+          </div>
+          <p>{finding.disclosure_assessment.plain_explanation}</p>
+          <details className="finding-technical-details">
+            <summary>Технические детали и ручная проверка</summary>
+            <p>{finding.disclosure_assessment.technical_explanation}</p>
+            {finding.disclosure_assessment.manual_checklist.length ? (
+              <ul>
+                {finding.disclosure_assessment.manual_checklist.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            ) : null}
+            {finding.disclosure_assessment.evidence_gaps.length ? (
+              <>
+                <strong>Чего не хватает для письма</strong>
+                <ul>
+                  {finding.disclosure_assessment.evidence_gaps.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </>
+            ) : null}
+          </details>
           <p>{tFindingText(finding.impact)}</p>
           <p className="recommendation">{tFindingText(finding.recommendation)}</p>
           {finding.evidence.poc_artifact_uri ? (

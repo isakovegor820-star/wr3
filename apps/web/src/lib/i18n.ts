@@ -162,10 +162,21 @@ const limitationLabels: Record<string, string> = {
   poc_requires_paid_tier: "PoC доступен только на платном тарифе",
   anonymous_owner_token_required_for_private_access: "для приватного доступа нужен токен владельца",
   zdr_required_for_security_triage: "для security-триажа требуется ZDR-маршрут",
+  openrouter_zdr_route_requested: "OpenRouter запрошен в ZDR-режиме",
+  navy_route_requested: "NavyAI выбран как LLM-провайдер",
+  navy_zdr_not_confirmed_using_configured_provider:
+    "ZDR для NavyAI не подтверждён, используйте этот режим только для локальных/разрешённых проверок",
+  navy_api_key_missing_using_deterministic_fallback:
+    "NavyAI ключ не настроен, wr3 безопасно перешёл на детерминированный триаж",
+  llm_triage_provider_error_using_deterministic_fallback:
+    "ИИ-провайдер не ответил, wr3 безопасно перешёл на детерминированный триаж",
   llm_triage_disabled_using_deterministic_fallback: "ИИ-триаж выключен, используется детерминированный резерв",
   poc_requires_standard_or_deep_depth: "PoC требует стандартную или глубокую проверку",
   poc_no_high_or_critical_candidates: "нет находок высокой/критичной важности для PoC",
+  poc_not_confirmed_after_retry_loop: "PoC не подтвердился после безопасных локальных попыток",
   foundry_binary_missing: "Foundry не установлен",
+  proxy_admin_owner_extraction_requires_rpc_or_explorer_metadata:
+    "для извлечения proxy admin/owner нужен RPC или дополнительные explorer-данные",
   high_risk_findings_require_human_review_before_public_claim:
     "находки высокого риска требуют ручного ревью перед публичным заявлением",
   public_page_redacts_private_findings: "публичная страница скрывает приватные находки",
@@ -192,7 +203,19 @@ export function tLimitation(value: string): string {
     return limitationLabels[value];
   }
   if (value.startsWith("source_pulled_from_")) {
-    return `исходный код подтянут из ${value.replace("source_pulled_from_", "")}`;
+    const source = value.replace("source_pulled_from_", "");
+    const [explorer, chain, address] = source.split(":");
+    return `исходный код подтянут из ${explorer}${chain ? ` (${chain})` : ""}${address ? ` для ${address.slice(0, 8)}...${address.slice(-6)}` : ""}`;
+  }
+  if (value.startsWith("llm_triage_provider_http_")) {
+    const status = value.match(/http_(\d+)/)?.[1] ?? "ошибка";
+    if (status === "403") {
+      return "ИИ-провайдер отказал в доступе к модели, проверь тариф/доступ к Claude Opus 4.7";
+    }
+    if (status === "429") {
+      return "ИИ-провайдер вернул лимит запросов, wr3 безопасно перешёл на детерминированный триаж";
+    }
+    return `ИИ-провайдер вернул HTTP ${status}, wr3 безопасно перешёл на детерминированный триаж`;
   }
   if (value.includes("_skipped:")) {
     const [engine, reason] = value.split("_skipped:");

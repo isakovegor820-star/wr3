@@ -102,6 +102,28 @@ function makeFinding(
     impact: args.impact,
     recommendation: args.recommendation,
     dismissal_reason: null,
-    human_review_status: args.severity === "high" || args.severity === "critical" ? "pending" : "not_required"
+    human_review_status: args.severity === "high" || args.severity === "critical" ? "pending" : "not_required",
+    disclosure_assessment: {
+      verdict: "too_early",
+      verdict_label: "Рано писать",
+      readiness: args.severity === "high" || args.severity === "critical" ? "candidate" : "signal",
+      readiness_label: args.severity === "high" || args.severity === "critical" ? "Кандидат" : "Сигнал",
+      can_contact_support: false,
+      false_positive_risk: "high",
+      plain_explanation: "Fixture adapter дал предварительный сигнал. Перед обращением нужна ручная проверка.",
+      technical_explanation: `Fixture category: ${args.category}; source: fixture_evm; location missing; PoC not attempted.`,
+      next_step: "Проверить точную location, impact и scope программы.",
+      manual_checklist: [
+        "Проверить, что цель входит в scope программы.",
+        "Найти точный файл/строку/функцию.",
+        "Подтвердить impact вручную или локальным test/fork."
+      ],
+      evidence_gaps: [
+        "Нет точной location.",
+        "Нет PoC/fork-test подтверждения."
+      ],
+      location_status: "missing",
+      location_label: "Точное место не определено"
+    }
   };
 }

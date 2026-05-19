@@ -56,6 +56,13 @@ HUMAN_REVIEW_LABELS = {
     "rejected": "отклонено",
 }
 
+VERDICT_LABELS = {
+    "can_write": "можно писать",
+    "too_early": "рано писать",
+    "do_not_write": "не писать",
+    "no_signal": "нет сигнала",
+}
+
 DEPTH_LABELS = {
     "preliminary": "предварительная",
     "standard": "стандартная",
@@ -80,10 +87,16 @@ LIMITATION_LABELS = {
     "poc_requires_paid_tier": "PoC доступен только на платном тарифе",
     "anonymous_owner_token_required_for_private_access": "для приватного доступа нужен токен владельца",
     "zdr_required_for_security_triage": "для security-триажа требуется ZDR-маршрут",
+    "openrouter_zdr_route_requested": "OpenRouter запрошен в ZDR-режиме",
+    "llm_triage_provider_error_using_deterministic_fallback":
+        "ИИ-провайдер не ответил, wr3 безопасно перешёл на детерминированный триаж",
     "llm_triage_disabled_using_deterministic_fallback": "ИИ-триаж выключен, используется детерминированный резерв",
     "poc_requires_standard_or_deep_depth": "PoC требует стандартную или глубокую проверку",
     "poc_no_high_or_critical_candidates": "нет находок высокой/критичной важности для PoC",
+    "poc_not_confirmed_after_retry_loop": "PoC не подтвердился после безопасных локальных попыток",
     "foundry_binary_missing": "Foundry не установлен",
+    "proxy_admin_owner_extraction_requires_rpc_or_explorer_metadata":
+        "для извлечения proxy admin/owner нужен RPC или дополнительные explorer-данные",
     "public_page_redacts_private_findings": "публичная страница скрывает приватные находки",
     "third_party_scan_public_poc_disabled": "для стороннего скана публичный PoC выключен",
     "public_claims_require_human_review": "публичные заявления требуют ручного ревью",
@@ -102,7 +115,19 @@ def _limitation_label(value: str) -> str:
     if value in LIMITATION_LABELS:
         return LIMITATION_LABELS[value]
     if value.startswith("source_pulled_from_"):
-        return f"исходный код подтянут из {value.replace('source_pulled_from_', '')}"
+        source = value.replace("source_pulled_from_", "")
+        explorer, _, rest = source.partition(":")
+        chain, _, address = rest.partition(":")
+        address_label = f" для {address[:8]}...{address[-6:]}" if address else ""
+        chain_label = f" ({chain})" if chain else ""
+        return f"исходный код подтянут из {explorer}{chain_label}{address_label}"
+    if value.startswith("llm_triage_provider_http_"):
+        status = value.split("http_", 1)[1].split("_", 1)[0]
+        if status == "403":
+            return "ИИ-провайдер отказал в доступе к модели, проверь тариф/доступ к Claude Opus 4.7"
+        if status == "429":
+            return "ИИ-провайдер вернул лимит запросов, wr3 безопасно перешёл на детерминированный триаж"
+        return f"ИИ-провайдер вернул HTTP {status}, wr3 безопасно перешёл на детерминированный триаж"
     if "_skipped:" in value:
         engine, reason = value.split("_skipped:", 1)
         return f"{engine} пропущен: {reason}"
@@ -125,6 +150,15 @@ class ReportRenderer:
             f"**Версия методики оценки:** {record.score_version}",
             "",
             f"> {DISCLAIMER}",
+            "",
+            "## Кто искал ошибки",
+            "",
+            f"- Агент проверки: `{record._security_agent_summary().status_label}`",
+            f"- Модель: `{record._security_agent_summary().model}`",
+            f"- Провайдер: `{record._security_agent_summary().provider}`",
+            f"- Резервный режим: `{record._security_agent_summary().fallback}`",
+            "",
+            record._security_agent_summary().explanation,
             "",
             "## Область проверки",
             "",
@@ -150,6 +184,23 @@ class ReportRenderer:
                 ]
             )
 
+        primary = self._primary_finding(record)
+        if primary:
+            assessment = primary.disclosure_assessment
+            lines.extend(
+                [
+                    "## Главный итог",
+                    "",
+                    f"- Вердикт: `{VERDICT_LABELS.get(assessment.verdict, assessment.verdict_label)}`",
+                    f"- Готовность: `{assessment.readiness_label}`",
+                    f"- Следующий шаг: {assessment.next_step}",
+                    f"- Риск false positive: `{assessment.false_positive_risk}`",
+                    "",
+                    assessment.plain_explanation,
+                    "",
+                ]
+            )
+
         lines.extend(["## Находки", ""])
         if not record.findings:
             lines.append("Находки пока недоступны.")
@@ -171,6 +222,13 @@ class ReportRenderer:
                     f"- Категория: `{finding.taxonomy.wr3_category}`",
                     f"- Источники: `{', '.join(finding.sources)}`",
                     f"- Ручное ревью: `{_label(HUMAN_REVIEW_LABELS, finding.human_review_status)}`",
+                    f"- Вердикт обращения: `{finding.disclosure_assessment.verdict_label}`",
+                    f"- Готовность к disclosure: `{finding.disclosure_assessment.readiness_label}`",
+                    f"- Location: `{finding.disclosure_assessment.location_label}`",
+                    "",
+                    f"Коротко: {finding.disclosure_assessment.plain_explanation}",
+                    "",
+                    f"Технически: {finding.disclosure_assessment.technical_explanation}",
                     "",
                     f"Влияние: {finding.impact}",
                     "",
@@ -178,6 +236,24 @@ class ReportRenderer:
                     "",
                 ]
             )
+            if finding.disclosure_assessment.manual_checklist:
+                lines.extend(
+                    [
+                        "Что проверить руками:",
+                        "",
+                        *(f"- {item}" for item in finding.disclosure_assessment.manual_checklist),
+                        "",
+                    ]
+                )
+            if finding.disclosure_assessment.evidence_gaps:
+                lines.extend(
+                    [
+                        "Чего не хватает для письма:",
+                        "",
+                        *(f"- {item}" for item in finding.disclosure_assessment.evidence_gaps),
+                        "",
+                    ]
+                )
 
         lines.extend(
             [
@@ -188,6 +264,12 @@ class ReportRenderer:
             ]
         )
         return "\n".join(lines)
+
+    def _primary_finding(self, record: AuditRecord):
+        if not record.findings:
+            return None
+        severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+        return sorted(record.findings, key=lambda item: (severity_rank[str(item.severity)], -item.confidence))[0]
 
     def render_html(self, record: AuditRecord) -> str:
         markdown = self.render_markdown(record)

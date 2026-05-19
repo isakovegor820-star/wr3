@@ -28,6 +28,22 @@ export const demoAudit: AuditSummary = {
   failed_stages: [],
   engine_version: "wr3-engine-v0.1",
   score_version: "wr3-score-v0.1",
+  static_analysis_status: "success",
+  security_agent: {
+    provider: "disabled",
+    model: "local-deterministic-triage",
+    status: "disabled",
+    status_label: "ИИ-агент не запускался",
+    provider_invoked: false,
+    fallback: "deterministic",
+    error_type: null,
+    agent_roles: ["severity_classifier", "false_positive_filter", "business_logic_reasoner", "cross_contract_analyzer"],
+    agent_payloads_received: [],
+    zdr_required: true,
+    prompt_wrapped_untrusted_source: true,
+    explanation: "Демо-находку создал fixture detector. ИИ в этом демо не подтверждал сигнал.",
+    recommendation: "Для реального глубокого triage подключи OpenRouter ZDR или локальную модель через WR3_LLM_MODEL."
+  },
   source_metadata: {
     source_hash: "demo",
     source_origin: "pasted",
@@ -93,6 +109,31 @@ export const demoFindings: Finding[] = [
     impact: "Привилегированный владелец может менять предположения о supply.",
     recommendation: "Задокументируйте лимиты mint, используйте multisig или добавьте неизменяемые caps.",
     dismissal_reason: null,
-    human_review_status: "not_required"
+    human_review_status: "not_required",
+    disclosure_assessment: {
+      verdict: "too_early",
+      verdict_label: "Рано писать",
+      readiness: "signal",
+      readiness_label: "Сигнал",
+      can_contact_support: false,
+      false_positive_risk: "high",
+      plain_explanation:
+        "wr3 увидел owner mint pattern. Это кандидатный сигнал, а не подтверждённая уязвимость: нужно проверить роли, supply cap и официальный scope.",
+      technical_explanation:
+        "Категория: centralization. Источник: wr3_heuristic_evm. Location missing; PoC не запускался; exploitability unknown.",
+      next_step: "Найти точное место в коде, проверить owner/admin и подтвердить impact перед любым письмом.",
+      manual_checklist: [
+        "Проверить, есть ли immutable cap или лимит mint.",
+        "Проверить owner/admin и multisig.",
+        "Проверить, входит ли токен в scope программы."
+      ],
+      evidence_gaps: [
+        "Нет точной location.",
+        "Нет PoC/fork-test подтверждения.",
+        "Сигнал найден только heuristic detector."
+      ],
+      location_status: "missing",
+      location_label: "Точное место не определено"
+    }
   }
 ];

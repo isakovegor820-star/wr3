@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 from wr3_api.adapters.base import EngineAdapter, EngineRunOptions, EngineRunResult, NormalizedSource, Timer
+from wr3_api.adapters.source_tree import materialize_source_tree
 from wr3_api.domain.enums import Chain, Exploitability, Severity
 from wr3_api.domain.schemas import ContractRef, Evidence, Finding, SourceLocation, Taxonomy
 from wr3_api.services.tool_paths import resolve_tool_binary
@@ -37,13 +38,18 @@ class SlitherAdapter(EngineAdapter):
 
         with Timer() as timer:
             with tempfile.TemporaryDirectory(prefix="wr3-slither-") as temp_dir:
-                src_path = Path(temp_dir) / source.file_name
-                src_path.write_text(source.source, encoding="utf-8")
+                source_tree = materialize_source_tree(Path(temp_dir), source.source, default_file_name=source.file_name)
+                target = str(source_tree.root if source_tree.multi_file else source_tree.targets[0])
                 proc = await asyncio.create_subprocess_exec(
                     binary,
-                    str(src_path),
+                    target,
                     "--json",
                     "-",
+                    "--solc-remaps",
+                    "@openzeppelin=./@openzeppelin",
+                    "--filter-paths",
+                    "node_modules|lib",
+                    cwd=temp_dir,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )

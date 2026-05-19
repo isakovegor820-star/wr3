@@ -25,6 +25,8 @@
     "telegram:menu:setup": "apps/api/.venv/bin/python scripts/telegram_set_menu_button.py",
     "telegram:webhook:setup": "apps/api/.venv/bin/python scripts/telegram_set_webhook.py",
     "telegram:publish": "bash scripts/telegram_publish_current.sh",
+    "scout:loop": "python3 scripts/scout_loop.py",
+    "scout:once": "python3 scripts/scout_loop.py --once",
     "calibration:scoring": "apps/api/.venv/bin/python scripts/scoring_calibration.py",
     "free-tier:readiness": "apps/api/.venv/bin/python scripts/free_tier_readiness.py",
     "local:readiness": "python3 scripts/local_readiness.py",

@@ -55,6 +55,22 @@ class Evidence(BaseModel):
     fuzzer_counterexample_uri: str | None = None
 
 
+class DisclosureAssessment(BaseModel):
+    verdict: str = "too_early"
+    verdict_label: str = "Рано писать"
+    readiness: str = "signal"
+    readiness_label: str = "Сигнал"
+    can_contact_support: bool = False
+    false_positive_risk: str = "high"
+    plain_explanation: str = "Это предварительный сигнал. Перед обращением нужна ручная проверка."
+    technical_explanation: str = "Детали ещё не рассчитаны."
+    next_step: str = "Проверить сигнал вручную и собрать доказательства."
+    manual_checklist: list[str] = Field(default_factory=list)
+    evidence_gaps: list[str] = Field(default_factory=list)
+    location_status: str = "unknown"
+    location_label: str = "Точное место не определено"
+
+
 class Finding(BaseModel):
     id: str = Field(default_factory=lambda: f"wr3-find-{uuid4()}")
     audit_id: str
@@ -73,6 +89,7 @@ class Finding(BaseModel):
     recommendation: str
     dismissal_reason: str | None = None
     human_review_status: HumanReviewStatus = HumanReviewStatus.NOT_REQUIRED
+    disclosure_assessment: DisclosureAssessment = Field(default_factory=DisclosureAssessment)
 
 
 class ScoreWeights(BaseModel):
@@ -155,12 +172,121 @@ class CreateAuditResponse(BaseModel):
     public_report_token: str | None = None
 
 
+class ScoutTarget(BaseModel):
+    source: str = "defillama_protocols"
+    protocol_name: str
+    slug: str
+    category: str | None = None
+    chain: Chain
+    address: str
+    tvl_usd: float | None = None
+    official_url: str | None = None
+    twitter_url: str | None = None
+    security_txt_url: str | None = None
+    security_email_guess: str | None = None
+    contact_instructions: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ScoutRunRequest(BaseModel):
+    source: str = "defillama_protocols"
+    limit: int = Field(default=5, ge=1, le=25)
+    min_tvl_usd: float = Field(default=0, ge=0)
+    chains: list[Chain] = Field(default_factory=list)
+    dry_run: bool = False
+    requested_depth: RequestedDepth = RequestedDepth.PRELIMINARY
+    tier: Tier = Tier.FREE
+
+
+class ScoutRunAllRequest(BaseModel):
+    source: str = "defillama_protocols"
+    per_chain_limit: int = Field(default=3, ge=1, le=10)
+    min_tvl_usd: float = Field(default=0, ge=0)
+    chains: list[Chain] = Field(default_factory=list)
+    dry_run: bool = False
+    requested_depth: RequestedDepth = RequestedDepth.DEEP
+    tier: Tier = Tier.TEAM
+
+
+class ScoutQueuedAudit(BaseModel):
+    audit_id: UUID
+    owner_access_token: str
+    chain: Chain
+    address: str
+    protocol_name: str
+    status_url: str
+    report_url: str
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ScoutRunResult(BaseModel):
+    source: str
+    discovered_count: int
+    queued_count: int
+    skipped_count: int
+    targets: list[ScoutTarget]
+    audits: list[ScoutQueuedAudit]
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ScoutReviewItem(BaseModel):
+    bucket: str
+    action_label: str
+    audit_id: UUID
+    owner_access_token: str | None = None
+    chain: Chain
+    address: str | None = None
+    state: AuditState
+    score: int | None = None
+    finding_count: int = 0
+    highest_severity: Severity | None = None
+    primary_title: str | None = None
+    verdict_label: str
+    readiness_label: str
+    can_contact_support: bool = False
+    why: str
+    next_step: str
+    evidence_gaps: list[str] = Field(default_factory=list)
+    support_route: list[str] = Field(default_factory=list)
+    report_url: str
+
+
+class ScoutReviewQueue(BaseModel):
+    ready_to_write: list[ScoutReviewItem] = Field(default_factory=list)
+    needs_validation: list[ScoutReviewItem] = Field(default_factory=list)
+    skip: list[ScoutReviewItem] = Field(default_factory=list)
+    totals: dict[str, int] = Field(default_factory=dict)
+    limitations: list[str] = Field(default_factory=list)
+
+
 class AuditAccessSummary(BaseModel):
     is_owner: bool = False
     is_public_view: bool = False
     can_view_private_findings: bool = False
     can_view_raw_outputs: bool = False
     auth_provider: str | None = None
+
+
+class SecurityAgentSummary(BaseModel):
+    provider: str = "disabled"
+    model: str = "local-deterministic-triage"
+    status: str = "not_started"
+    status_label: str = "ИИ-агент ещё не запускался"
+    provider_invoked: bool = False
+    fallback: str = "not_started"
+    error_type: str | None = None
+    agent_roles: list[str] = Field(default_factory=list)
+    agent_payloads_received: list[str] = Field(default_factory=list)
+    zdr_required: bool = True
+    prompt_wrapped_untrusted_source: bool = False
+    explanation: str = (
+        "Пока findings создают статические инструменты и локальные эвристики. "
+        "ИИ-агент должен только триажить и снижать false positives."
+    )
+    recommendation: str = (
+        "Для глубокого режима подключи платную ZDR/local модель в WR3_LLM_MODEL. "
+        "Free-модели могут упираться в rate-limit и уходить в fallback."
+    )
 
 
 class AuditEvent(BaseModel):
@@ -191,6 +317,8 @@ class AuditSummary(BaseModel):
     failed_stages: list[str]
     engine_version: str
     score_version: str
+    static_analysis_status: str = "not_started"
+    security_agent: SecurityAgentSummary = Field(default_factory=SecurityAgentSummary)
     source_metadata: SourceMetadata = Field(default_factory=SourceMetadata)
     retention_until: datetime | None = None
     adversarial_input_detected: bool = False
@@ -235,10 +363,92 @@ class AuditRecord(BaseModel):
             failed_stages=self.failed_stages,
             engine_version=self.engine_version,
             score_version=self.score_version,
+            static_analysis_status=self._static_analysis_status(),
+            security_agent=self._security_agent_summary(),
             source_metadata=self.source_metadata,
             retention_until=self.retention_until,
             adversarial_input_detected=self.adversarial_input_detected,
             access=access or AuditAccessSummary(),
+        )
+
+    def _static_analysis_status(self) -> str:
+        static_runs = [run for run in self.engine_runs if run.engine in {"aderyn", "wake", "slither", "wr3_heuristic_evm", "wr3_heuristic_solana"}]
+        if not static_runs:
+            return "not_started"
+        successes = [run for run in static_runs if run.status == "success"]
+        failures = [run for run in static_runs if run.status == "failed"]
+        if successes and failures:
+            return "partial"
+        if successes:
+            return "success"
+        if failures:
+            return "failed"
+        return "skipped"
+
+    def _security_agent_summary(self) -> SecurityAgentSummary:
+        route_events = [event for event in self.events if event.event_type == "llm_triage_route"]
+        if not route_events:
+            return SecurityAgentSummary()
+        payload = route_events[-1].payload
+        fallback = str(payload.get("fallback") or "unknown")
+        provider_invoked = bool(payload.get("provider_invoked"))
+        received = payload.get("agent_payloads_received")
+        agent_payloads_received = [str(item) for item in received] if isinstance(received, list) else []
+        provider = str(payload.get("provider") or "unknown")
+        model = str(payload.get("model") or "unknown")
+        error_type = payload.get("error_type")
+        error_text = str(error_type) if error_type else None
+        if not provider_invoked:
+            status = "disabled"
+            status_label = "ИИ-агент не запускался"
+            explanation = (
+                "В этом прогоне findings нашли статические инструменты/эвристики. "
+                "LLM не участвовал в проверке."
+            )
+        elif fallback == "deterministic" or error_type:
+            status = "fallback"
+            status_label = "ИИ-агент не подтвердил"
+            if provider == "navy" and model == "claude-opus-4.7" and error_text == "HTTPStatusError:403":
+                explanation = (
+                    "wr3 выбрал Claude Opus 4.7 через NavyAI, но Navy вернул отказ доступа. "
+                    "Эта модель требует paid/Max доступ в аккаунте NavyAI, поэтому ИИ-проверка не была выполнена."
+                )
+            elif error_text == "HTTPStatusError:429":
+                explanation = (
+                    f"Была выбрана модель {model} через {provider}, но провайдер вернул rate limit. "
+                    "wr3 не считает это ИИ-подтверждением и показывает сигнал как кандидата."
+                )
+            else:
+                explanation = (
+                    f"Была выбрана модель {model} через {provider}, но провайдер не дал полноценную проверку. "
+                    "wr3 не считает это ИИ-подтверждением и показывает сигнал как кандидата."
+                )
+        elif agent_payloads_received:
+            status = "provider_confirmed"
+            status_label = "ИИ-агент отработал"
+            explanation = (
+                f"Модель {model} через {provider} вернула ответы triage-агентов. "
+                "Это усиливает сигнал, но не заменяет PoC и ручную проверку."
+            )
+        else:
+            status = "unknown"
+            status_label = "Статус ИИ-агента неясен"
+            explanation = "wr3 не получил достаточно данных, чтобы считать AI-triage успешным."
+
+        roles = payload.get("agent_roles")
+        return SecurityAgentSummary(
+            provider=provider,
+            model=model,
+            status=status,
+            status_label=status_label,
+            provider_invoked=provider_invoked,
+            fallback=fallback,
+            error_type=error_text,
+            agent_roles=[str(item) for item in roles] if isinstance(roles, list) else [],
+            agent_payloads_received=agent_payloads_received,
+            zdr_required=bool(payload.get("zdr_required", True)),
+            prompt_wrapped_untrusted_source=bool(payload.get("prompt_wrapped_untrusted_source")),
+            explanation=explanation,
         )
 
 

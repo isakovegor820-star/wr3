@@ -19,6 +19,7 @@ from wr3_api.domain.schemas import (
     AuditAccessSummary,
     AuditRecord,
     AuditSummary,
+    DisclosureAssessment,
     DisclosureAdvanceRequest,
     CreateAuditRequest,
     DisclosureContactLogRequest,
@@ -159,6 +160,9 @@ class AuditService:
             raise AuditNotFound(str(audit_id))
         return record
 
+    def save_record(self, record: AuditRecord) -> None:
+        self._audit_repository.save(record)
+
     def list_audits_for_dashboard(
         self,
         *,
@@ -181,24 +185,58 @@ class AuditService:
             if severity and highest_severity != severity:
                 continue
             rows.append(
-                {
-                    "audit_id": str(record.audit_id),
-                    "owner_access_token": record.owner_access_token if is_local_dashboard else None,
-                    "chain": record.request.chain,
-                    "address": record.request.address,
-                    "state": record.state,
-                    "tier": record.request.tier,
-                    "requested_depth": record.request.requested_depth,
-                    "score": record.score.model_dump(mode="json") if record.score else None,
-                    "finding_count": len(record.findings),
-                    "highest_severity": highest_severity,
-                    "limitations_count": len(record.limitations),
-                    "project_key": f"{record.request.chain}:{record.request.address or 'source-only'}",
-                    "created_at": record.created_at.isoformat(),
-                    "updated_at": record.updated_at.isoformat(),
-                }
+                self._dashboard_row(record, highest_severity, is_local_dashboard)
             )
         return rows
+
+    def _dashboard_row(
+        self,
+        record: AuditRecord,
+        highest_severity: Severity | None,
+        is_local_dashboard: bool,
+    ) -> dict[str, object]:
+        primary = self._primary_finding(record)
+        assessment = primary.disclosure_assessment if primary else None
+        return {
+            "audit_id": str(record.audit_id),
+            "owner_access_token": record.owner_access_token if is_local_dashboard else None,
+            "chain": record.request.chain,
+            "address": record.request.address,
+            "state": record.state,
+            "tier": record.request.tier,
+            "requested_depth": record.request.requested_depth,
+            "score": record.score.model_dump(mode="json") if record.score else None,
+            "finding_count": len(record.findings),
+            "highest_severity": highest_severity,
+            "limitations_count": len(record.limitations),
+            "project_key": f"{record.request.chain}:{record.request.address or 'source-only'}",
+            "created_at": record.created_at.isoformat(),
+            "updated_at": record.updated_at.isoformat(),
+            "static_analysis_status": record._static_analysis_status(),
+            "primary_finding_id": primary.id if primary else None,
+            "primary_finding_title": primary.summary if primary else None,
+            "primary_verdict": assessment.verdict if assessment else "no_signal",
+            "primary_verdict_label": assessment.verdict_label if assessment else "Нет сигнала",
+            "primary_readiness": assessment.readiness if assessment else "no_signal",
+            "primary_readiness_label": assessment.readiness_label if assessment else "Нет сигнала",
+            "primary_next_step": assessment.next_step if assessment else "Запустить или дождаться скана.",
+            "primary_explanation": assessment.plain_explanation if assessment else "Находок пока нет.",
+            "primary_false_positive_risk": assessment.false_positive_risk if assessment else "unknown",
+            "primary_evidence_gaps": assessment.evidence_gaps if assessment else [],
+            "can_create_disclosure": bool(assessment.can_contact_support) if assessment else False,
+        }
+
+    def _primary_finding(self, record: AuditRecord) -> Finding | None:
+        if not record.findings:
+            return None
+        severity_rank = {
+            Severity.CRITICAL: 0,
+            Severity.HIGH: 1,
+            Severity.MEDIUM: 2,
+            Severity.LOW: 3,
+            Severity.INFO: 4,
+        }
+        return sorted(record.findings, key=lambda item: (severity_rank[item.severity], -item.confidence))[0]
 
     def get_summary(self, audit_id: UUID, access: AuditAccessContext | None = None) -> AuditSummary:
         record = self.get_record(audit_id)
@@ -544,6 +582,7 @@ class AuditService:
         else:
             record.limitations.append("poc_requires_standard_or_deep_depth")
 
+        self._annotate_findings_for_disclosure(record)
         self._transition(record, AuditState.SCORING, reason="scoring_started")
         record.score = score_audit(
             record.findings,
@@ -564,6 +603,196 @@ class AuditService:
             record.limitations.append("high_risk_findings_require_human_review_before_public_claim")
         self._transition(record, AuditState.COMPLETED, reason="report_ready")
         self._audit_repository.save(record)
+
+    def _annotate_findings_for_disclosure(self, record: AuditRecord) -> None:
+        ai_fallback = any(
+            limitation in record.limitations
+            for limitation in {
+                "llm_triage_disabled_using_deterministic_fallback",
+                "llm_triage_provider_error_using_deterministic_fallback",
+            }
+        )
+        failed_engines = [run.engine for run in record.engine_runs if run.status == "failed"]
+        for index, finding in enumerate(record.findings):
+            record.findings[index] = finding.model_copy(
+                update={
+                    "disclosure_assessment": self._finding_disclosure_assessment(
+                        finding,
+                        ai_fallback=ai_fallback,
+                        failed_engines=failed_engines,
+                        source_is_verified=not record.source_metadata.bytecode_only,
+                    )
+                }
+            )
+
+    def _finding_disclosure_assessment(
+        self,
+        finding: Finding,
+        *,
+        ai_fallback: bool,
+        failed_engines: list[str],
+        source_is_verified: bool,
+    ) -> DisclosureAssessment:
+        location_known = bool(finding.location.start_line or finding.location.function)
+        heuristic_only = all(source.startswith("wr3_heuristic") for source in finding.sources)
+        non_heuristic_static = any(source in {"aderyn", "wake", "slither"} for source in finding.sources)
+        poc_confirmed = finding.evidence.poc_status == "confirmed"
+        static_ai_strong = (
+            non_heuristic_static
+            and not ai_fallback
+            and finding.confidence >= 0.70
+            and finding.exploitability in {Exploitability.LIKELY, Exploitability.CONFIRMED, Exploitability.THEORETICAL}
+        )
+
+        evidence_gaps: list[str] = []
+        if not location_known:
+            evidence_gaps.append("Нужно точное место в коде: файл, строка или функция.")
+        if heuristic_only:
+            evidence_gaps.append("Сигнал пока найден только heuristic detector, нужен Aderyn/Wake/Slither или ручной AST-review.")
+        if ai_fallback:
+            evidence_gaps.append("ИИ-триаж не подтвердил сигнал: использован deterministic fallback.")
+        if failed_engines:
+            evidence_gaps.append(f"Часть движков упала: {', '.join(sorted(set(failed_engines)))}.")
+        if finding.evidence.poc_status != "confirmed":
+            evidence_gaps.append("Нет локального PoC/fork-test подтверждения.")
+        if not source_is_verified:
+            evidence_gaps.append("Исходный код не верифицирован, доверие к анализу ниже.")
+
+        if finding.exploitability == Exploitability.DISMISSED or finding.dismissal_reason:
+            verdict = "do_not_write"
+            verdict_label = "Не писать"
+            readiness = "dismissed"
+            readiness_label = "Отклонено"
+            can_contact = False
+            false_positive_risk = "high"
+            next_step = "Оставить причину отклонения и не создавать disclosure."
+        elif poc_confirmed or static_ai_strong:
+            verdict = "can_write"
+            verdict_label = "Можно писать"
+            readiness = "ready_to_contact"
+            readiness_label = "Готово к письму"
+            can_contact = True
+            false_positive_risk = "low" if poc_confirmed else "medium"
+            next_step = "Собрать приватный disclosure draft и отправлять только в официальный security contact."
+        else:
+            verdict = "too_early"
+            verdict_label = "Рано писать"
+            readiness = "candidate" if finding.severity in {Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM} else "signal"
+            readiness_label = "Кандидат" if readiness == "candidate" else "Сигнал"
+            can_contact = False
+            false_positive_risk = "high" if heuristic_only or not location_known else "medium"
+            next_step = "Сначала ручная проверка, точная location и независимое подтверждение сигнала."
+
+        location_label = (
+            f"{finding.location.file or finding.contract.file or 'исходник'}"
+            + (f":{finding.location.start_line}" if finding.location.start_line else "")
+            + (f" · {finding.location.function}" if finding.location.function else "")
+            if location_known
+            else "Точное место не определено"
+        )
+        plain = self._plain_explanation(finding, heuristic_only=heuristic_only, location_known=location_known)
+        technical = self._technical_explanation(
+            finding,
+            heuristic_only=heuristic_only,
+            ai_fallback=ai_fallback,
+            failed_engines=failed_engines,
+            location_known=location_known,
+        )
+        checklist = self._manual_checklist(finding)
+
+        return DisclosureAssessment(
+            verdict=verdict,
+            verdict_label=verdict_label,
+            readiness=readiness,
+            readiness_label=readiness_label,
+            can_contact_support=can_contact,
+            false_positive_risk=false_positive_risk,
+            plain_explanation=plain,
+            technical_explanation=technical,
+            next_step=next_step,
+            manual_checklist=checklist,
+            evidence_gaps=evidence_gaps,
+            location_status="known" if location_known else "missing",
+            location_label=location_label,
+        )
+
+    def _plain_explanation(self, finding: Finding, *, heuristic_only: bool, location_known: bool) -> str:
+        if finding.taxonomy.wr3_category == "upgradeability":
+            base = (
+                "wr3 увидел proxy/delegatecall-паттерн. Это не баг само по себе, "
+                "но баг возможен, если target implementation или admin-контроль можно подменить небезопасно."
+            )
+        elif finding.taxonomy.wr3_category == "reentrancy":
+            base = (
+                "wr3 увидел low-level внешний вызов. Это кандидат на reentrancy только если вызов происходит "
+                "до безопасного обновления состояния или без защитного lock."
+            )
+        elif finding.taxonomy.wr3_category == "access_control":
+            base = "wr3 увидел риск в access-control. Нужно проверить, кто реально может вызвать опасный путь."
+        else:
+            base = "wr3 увидел подозрительный security-паттерн. Это кандидат, а не подтверждённая уязвимость."
+        qualifiers = []
+        if heuristic_only:
+            qualifiers.append("пока это heuristic-only сигнал")
+        if not location_known:
+            qualifiers.append("точное место в коде ещё не найдено")
+        return base + (" Сейчас " + ", ".join(qualifiers) + "." if qualifiers else "")
+
+    def _technical_explanation(
+        self,
+        finding: Finding,
+        *,
+        heuristic_only: bool,
+        ai_fallback: bool,
+        failed_engines: list[str],
+        location_known: bool,
+    ) -> str:
+        parts = [
+            f"Категория: {finding.taxonomy.wr3_category}.",
+            f"Источники: {', '.join(finding.sources)}.",
+            f"Exploitability: {finding.exploitability}; confidence: {finding.confidence:.2f}.",
+        ]
+        if finding.taxonomy.wr3_category == "upgradeability":
+            parts.append("Проверить proxy admin, implementation address, возможность upgrade и storage-layout assumptions.")
+        if finding.taxonomy.wr3_category == "reentrancy":
+            parts.append("Проверить порядок effects/interactions, external call target, balance/share accounting и наличие guard.")
+        if heuristic_only:
+            parts.append("Structured AST/static confirmation пока отсутствует.")
+        if ai_fallback:
+            parts.append("LLM route не дал provider-confirmation; использован deterministic fallback.")
+        if failed_engines:
+            parts.append(f"Failed engines: {', '.join(sorted(set(failed_engines)))}.")
+        if not location_known:
+            parts.append("Location missing: не показывать как готовый report до ручного source mapping.")
+        return " ".join(parts)
+
+    def _manual_checklist(self, finding: Finding) -> list[str]:
+        common = [
+            "Проверить, что цель входит в scope программы.",
+            "Найти точный файл/строку/функцию и сохранить evidence.",
+            "Проверить, есть ли реальный impact, а не только подозрительный паттерн.",
+        ]
+        if finding.taxonomy.wr3_category == "upgradeability":
+            return [
+                *common,
+                "Проверить proxy admin / owner и кто может менять implementation.",
+                "Сравнить storage layout proxy и implementation.",
+                "Проверить, ограничен ли delegatecall target allowlist/codehash.",
+            ]
+        if finding.taxonomy.wr3_category == "reentrancy":
+            return [
+                *common,
+                "Проверить, обновляется ли состояние до external call.",
+                "Проверить наличие reentrancy guard или pull-payment паттерна.",
+                "Попробовать безопасный local/fork-test без broadcast.",
+            ]
+        if finding.taxonomy.wr3_category == "access_control":
+            return [
+                *common,
+                "Проверить роли, owner/admin, multisig и tx.origin/msg.sender assumptions.",
+                "Проверить негативный тест: кто не должен иметь доступ.",
+            ]
+        return common
 
     async def _pull_verified_source(self, record: AuditRecord):
         if not record.request.address:
