@@ -92,6 +92,10 @@ Chat Completions-compatible endpoint with `zdr: true` and
 controls. The prompt preview wraps source with
 `UNTRUSTED_CONTRACT_SOURCE_BEGIN/END` so comments and NatSpec are treated as
 hostile data, not instructions.
+NavyAI is also supported for closed-team local triage through the
+OpenAI-compatible `/chat/completions` endpoint with `WR3_LLM_MODEL=gpt-5.5` and
+JSON-object response mode. Provider failures record only metadata and fall back
+to deterministic triage.
 
 ## Sandbox Command Boundary
 
@@ -109,27 +113,13 @@ notes. Production vector storage is separated into
 `infra/postgres/002_pgvector_knowledge_schema.sql` so local Postgres setups
 without pgvector still boot cleanly.
 
-## Tier And Quota Policy
+## Local Access Policy
 
-`InMemoryQuotaLimiter` centralizes MVP tier rules before audit processing:
-
-- Free: 1 scan per 24h, preliminary depth only, 7-day retention.
-- Hobby: 10 scans per 30 days, standard max depth, no PoC worker access.
-- Team: 100 scans per 30 days, deep depth, PoC worker access, 180-day retention.
-- Pro: custom/unlimited local policy, deep depth, PoC worker access, 365-day
-  retention.
-
-When quotas are exceeded, the job is degraded to preliminary/static mode instead
-of being hard-blocked. Paid tier claims are marked with
-`<tier>_billing_verification_stub` until billing is wired server-side.
-
-## Billing Boundary
-
-The MVP exposes subscription plan metadata, one-shot report package metadata,
-manual USDC payment intents, and Request Finance/Polar checkout intent
-contracts. Payment intents are pending until a reviewer confirms a transaction
-reference through `/v1/billing/subscriptions/confirm-manual`. Provider checkout
-URLs are returned only when the corresponding env configuration is present.
+`InMemoryQuotaLimiter` is now only a backwards-compatible boundary for older
+requests that still send a legacy `tier` value. It always preserves the
+requested depth, allows PoC/fuzzing paths, and uses the unrestricted retention
+window. Product access is controlled by safety scope and owner/private access,
+not by plans.
 
 ## Telegram Boundary
 
@@ -137,7 +127,7 @@ URLs are returned only when the corresponding env configuration is present.
 preliminary audit for a Telegram-derived user id. The endpoint returns a reply
 payload and status URL. `/v1/auth/telegram/init-data` validates Telegram Mini
 App initData with bot-token HMAC and requires explicit account consent; Mini App
-screens, alerts, and TON Connect payments remain separate integrations.
+screens and alerts remain separate integrations.
 
 ## Safe Harbor Boundary
 

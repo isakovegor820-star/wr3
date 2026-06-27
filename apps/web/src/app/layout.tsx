@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Manrope } from "next/font/google";
+import { Inter, JetBrains_Mono, Manrope } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,10 +19,16 @@ const monoFont = JetBrains_Mono({
   display: "swap"
 });
 
+const interFont = Inter({
+  subsets: ["latin", "cyrillic"],
+  variable: "--font-inter",
+  display: "swap"
+});
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" suppressHydrationWarning>
-      <body className={`${uiFont.variable} ${monoFont.variable}`}>{children}</body>
+      <body className={`${uiFont.variable} ${monoFont.variable} ${interFont.variable}`}>{children}</body>
     </html>
   );
 }

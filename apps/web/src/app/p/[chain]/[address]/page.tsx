@@ -12,7 +12,34 @@ export default async function PublicProjectPage({
   params: Promise<{ chain: Chain; address: string }>;
 }) {
   const { chain, address } = await params;
-  const project = await getPublicProject(chain, address);
+  let project: Awaited<ReturnType<typeof getPublicProject>>;
+  try {
+    project = await getPublicProject(chain, address);
+  } catch {
+    return (
+      <main className="audit-shell">
+        <nav className="top-nav">
+          <Link href="/">
+            <ArrowLeft aria-hidden="true" size={17} />
+            Новый скан
+          </Link>
+        </nav>
+        <header className="audit-header">
+          <div>
+            <p className="eyebrow">Публичная страница проекта</p>
+            <h1>{chainLabels[chain] ?? chain}: карточка недоступна</h1>
+            <p className="audit-address">{address}</p>
+          </div>
+        </header>
+        <section className="panel">
+          <p>
+            Не удалось загрузить публичную карточку. Возможно, этот адрес ещё не сканировался,
+            адрес введён неверно, или API сейчас недоступен.
+          </p>
+        </section>
+      </main>
+    );
+  }
   const score = project.score?.final_score ?? null;
   const HarborIcon = project.safe_harbor_status ? ShieldCheck : ShieldX;
 

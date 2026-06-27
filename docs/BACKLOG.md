@@ -15,11 +15,11 @@ provider configuration, and roadmap production hardening.
 | FR-003 | P0 | done | Static engines in parallel | Aderyn/Wake/Slither subprocess adapters + EVM/Solana heuristics + raw artifact boundary done |
 | FR-004 | P0 | done | LLM triage reduces noise | ZDR router/prompt guardrails + optional OpenRouter four-agent calls + deterministic fallback + consensus done |
 | FR-005 | P0 | done | HTML/Markdown report | Includes disclaimer, score, findings, limitations |
-| FR-006 | P1 | done | Foundry PoC attempts for top findings | Tier-gated Foundry retry-loop boundary + max attempts + private artifact handling done; real LLM generation remains provider tuning |
+| FR-006 | P1 | done | Foundry PoC attempts for top findings | Foundry retry-loop boundary + max attempts + private artifact handling done; real LLM generation remains provider tuning |
 | FR-007 | P0 | done | Reproducible scoring | `wr3-score-v0.1` |
 | FR-008 | P0 | done | SIWE/email auth | Owner-token/dev-header access, optional SIWE signature verify, email magic-link request/verify, and Telegram initData auth done |
-| FR-009 | P0 | done | Tier access control | Server-side Free/Hobby/Team/Pro policy, depth caps, PoC gates, raw-output owner/tier gates, and degraded quota mode done |
-| FR-010 | P1 | done | Payment/invoice MVP | Plan/package API, manual USDC intent, Request/Polar checkout intent contracts, and reviewer confirmation done |
+| FR-009 | P0 | done | Unrestricted local access | No plan selector, no depth caps, no PoC/fuzzing tier gates, raw outputs gated only by owner access |
+| FR-010 | P1 | removed | Payment/invoice MVP | Removed from localhost product; platform runs without tariffs or payment flows |
 | FR-011 | P1 | done | Telegram `/scan` | Webhook command parser + audit enqueue + initData auth bridge + `/tg` scan UI done |
 | FR-012 | P2 | done | Public project page | API + web `/p/<chain>/<address>` redacted view done with human-review redaction |
 | FR-013 | P1 | done | Benchmark runner | MVP fixture runner with EVM/Solana cases + precision/recall artifact done |
@@ -80,14 +80,14 @@ provider configuration, and roadmap production hardening.
 | Redis + Celery workers | P0 | in_progress | Dispatcher + worker task files done; production Redis/Celery deployment pending |
 | Explorer clients | P0 | done | Etherscan/Base/BscScan/Arbiscan clients with retry policy, metadata capture, proxy hints, and bytecode-only fallback added; production keys are deployment config |
 | ZDR LLM triage DAG | P0 | done | Router/prompt guardrail + OpenRouter ZDR request path + four-agent calls + deterministic consensus done |
-| Foundry PoC retry loop | P1 | done | Safe retry-loop boundary with max attempts, tier caps, and private artifact handling done |
+| Foundry PoC retry loop | P1 | done | Safe retry-loop boundary with max attempts and private artifact handling done |
 | Medusa/ItyFuzz fuzzing | P1 | in_progress | Worker boundary + sandbox command allowlist + benchmark metric fields done; real invariant generation/execution pending |
 | Solana AST beta | P2 | in_progress | Heuristic Anchor footgun subset done; AST/Trident pending |
 | SIWE/email auth | P0 | done | Owner-token/dev-header boundary + optional SIWE verification + email magic-link lifecycle done |
-| Billing | P1 | done | Manual USDC + Request/Polar checkout intent contracts done; live provider accounts are deployment config |
-| Telegram bot + Mini App | P1 | done | `/scan` webhook + initData auth + `/tg` scan UI done; TON Connect remains roadmap |
+| Billing | P1 | removed | No billing routes, plans, quotas, local tier selector, or payment provider flow |
+| Telegram bot + Mini App | P1 | done | `/scan` webhook + initData auth + `/tg` scan UI done |
 | News scraper | P2 | in_progress | Source registry + DeFiLlama-like normalization + dedup scaffold done; live fetch workers pending |
-| On-chain monitoring | roadmap | todo | Paid-tier continuous monitoring |
+| On-chain monitoring | roadmap | todo | Continuous monitoring without plan gates |
 | CLI | roadmap | todo | CI/CD integration |
 | VS Code extension | roadmap | todo | Olympix-adjacent distribution |
 | TON/Aptos/Sui support | roadmap | todo | After EVM/Solana proof |

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Filter, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import type { AuditState, Chain, Severity } from "@wr3/shared";
 import { deleteAudit, listAudits, retryAudit, type DashboardAudit } from "@/lib/api";
-import { auditStateLabels, chainLabels, severityLabels, tierLabels } from "@/lib/i18n";
+import { auditStateLabels, chainLabels, severityLabels } from "@/lib/i18n";
 
 const chains: Array<Chain | ""> = ["", "ethereum", "base", "bsc", "arbitrum", "solana"];
 const states: Array<AuditState | ""> = [
@@ -149,7 +149,7 @@ export function DashboardClient() {
                         {audit.audit_id}
                       </Link>
                       <p className="muted-copy">
-                        {chainLabels[audit.chain]} · {auditStateLabels[audit.state]} · {tierLabels[audit.tier]} ·{" "}
+                        {chainLabels[audit.chain]} · {auditStateLabels[audit.state]} ·{" "}
                         {audit.finding_count} находок
                       </p>
                     </div>

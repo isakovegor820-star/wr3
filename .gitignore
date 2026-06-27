@@ -19,3 +19,5 @@ reports/
 artifacts/
 external/
 *.log
+.claude/
+.impeccable/

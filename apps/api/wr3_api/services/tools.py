@@ -164,16 +164,23 @@ class ToolStatusService:
                 safe_scope=probe.safe_scope,
             )
         version = self._version(path, probe.version_args)
+        is_broken = version.startswith("version_error:")
         return ToolStatus(
             id=probe.id,
             label=probe.label,
             binary=probe.binary,
             category=probe.category,
-            installed=True,
+            installed=not is_broken,
             required_for_local_100=probe.required_for_local_100,
             path=path,
             version=version,
-            status="installed",
+            status=(
+                "broken_required"
+                if is_broken and probe.required_for_local_100
+                else "broken_optional"
+                if is_broken
+                else "installed"
+            ),
             install_hint=probe.install_hint,
             safe_scope=probe.safe_scope,
         )

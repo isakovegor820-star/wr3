@@ -125,19 +125,19 @@ async function main() {
     await firstTask.waitFor({ timeout: 10000 });
     await firstTask.click();
     const detail = page.locator(".cockpit-detail");
-    await detail.getByRole("button", { name: /Создать отчёт/ }).click();
-    await page.getByText(/Черновик баг-репорта|Черновик приватного письма/).first().waitFor({ timeout: 8000 });
-    await detail.getByRole("button", { name: /Проверено/ }).click();
+    await detail.scrollIntoViewIfNeeded();
+    await detail.getByText("Карточка задачи").waitFor({ timeout: 8000 });
+    await detail.getByText(/Черновик баг-репорта|Черновик приватного письма/).first().waitFor({ timeout: 8000 });
     await detail.getByRole("button", { name: /Сохранить доказательства/ }).click();
   });
 
   await runStep(results, page, "engine_and_legal_cards", async () => {
     await openRoute(page, "/");
     await page.getByRole("button", { name: /Движок/ }).click();
-    await page.getByText("Здоровье движка").first().waitFor({ timeout: 10000 });
-    await page.getByText("Радар bug bounty").first().waitFor({ timeout: 10000 });
+    await page.getByText("Звёздный радар сетей").first().waitFor({ timeout: 10000 });
+    await page.getByText("Где нужен следующий шаг").first().waitFor({ timeout: 10000 });
     await page.getByRole("button", { name: /Обращение/ }).click();
-    await page.getByText("Юридические проверки").first().waitFor({ timeout: 10000 });
+    await page.getByText("Черновик, проверка канала и ручной лог").first().waitFor({ timeout: 10000 });
   });
 
   await runStep(results, page, "mini_app_scan_flow", async () => {
@@ -155,7 +155,7 @@ async function main() {
     await page.getByText(/безопасный bounty-скан|Скан создан|Кандидатов пока нет/i).first().waitFor({ timeout: 25000 });
   });
 
-  for (const route of ["/dashboard", "/tools", "/integrations", "/disclosure", "/billing", "/telegram-emulator"]) {
+  for (const route of ["/dashboard", "/tools", "/integrations", "/disclosure", "/telegram-emulator"]) {
     await runStep(results, page, `route_${routeName(route)}`, async () => {
       await openRoute(page, route);
       await page.waitForTimeout(300);

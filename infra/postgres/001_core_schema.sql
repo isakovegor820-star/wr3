@@ -100,18 +100,6 @@ create table if not exists artifacts (
     created_at timestamptz not null default now()
 );
 
-create table if not exists subscriptions (
-    id text primary key,
-    user_id text not null references users(id) on delete cascade,
-    tier text not null,
-    provider text not null,
-    status text not null,
-    quota_used integer not null default 0,
-    current_period_end timestamptz,
-    payload jsonb not null default '{}'::jsonb,
-    created_at timestamptz not null default now()
-);
-
 create table if not exists disclosure_cases (
     id text primary key,
     finding_id text not null,
@@ -151,6 +139,5 @@ create index if not exists idx_engine_runs_audit_id on engine_runs(audit_id);
 create index if not exists idx_findings_audit_id on findings(audit_id);
 create index if not exists idx_findings_severity on findings(severity);
 create index if not exists idx_artifacts_audit_id_kind on artifacts(audit_id, kind);
-create index if not exists idx_subscriptions_user_id on subscriptions(user_id);
 create index if not exists idx_benchmark_runs_dataset on benchmark_runs(dataset);
 create index if not exists idx_watchlist_user_chain_address on watchlist_entries(user_id, chain, address);

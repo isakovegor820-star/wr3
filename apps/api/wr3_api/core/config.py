@@ -6,6 +6,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "wr3 API"
     environment: str = "development"
+    # Reviewer access (scout autopilot, review queue, disclosure ops). When set,
+    # the X-WR3-Reviewer header must equal this token. When unset, the legacy
+    # "true" header is honored only in development; outside development reviewer
+    # access via header is impossible until a token is configured.
+    reviewer_token: str | None = None
     cors_origins: list[str] = ["http://127.0.0.1:3000", "http://localhost:3000"]
     cors_origin_regex: str | None = None
     max_source_bytes: int = 750_000
@@ -30,17 +35,10 @@ class Settings(BaseSettings):
     backup_encryption_passphrase: str | None = None
     sentry_dsn: str | None = None
     telegram_alert_chat_id: str | None = None
-    usdc_receive_address: str | None = None
-    request_finance_api_key: str | None = None
-    request_finance_invoice_base_url: str | None = None
-    polar_api_key: str | None = None
-    polar_checkout_base_url: str | None = None
-    lemon_squeezy_api_key: str | None = None
-    lemon_squeezy_checkout_base_url: str | None = None
-    ton_connect_manifest_url: str | None = None
     web_base_url: str = "http://127.0.0.1:3001"
     telegram_webhook_secret: str | None = None
     telegram_bot_token: str | None = None
+    telegram_reviewer_user_ids: list[str] = []
     telegram_init_data_max_age_seconds: int = 86_400
     siwe_signature_verification_enabled: bool = False
     email_delivery_enabled: bool = False
@@ -55,6 +53,10 @@ class Settings(BaseSettings):
     llm_model: str = "local-deterministic-triage"
     llm_zdr_required: bool = True
     llm_timeout_seconds: float = 25.0
+    # Cost controls for autonomous (scout) operation.
+    llm_max_calls_per_day: int = 0  # 0 = unlimited; >0 caps provider calls/day
+    llm_kill_switch: bool = False  # force deterministic triage (no LLM calls)
+    llm_max_tokens: int = 4000  # triage JSON grows with finding count; avoid truncation
     openrouter_api_key: str | None = None
     navy_api_key: str | None = None
     navy_base_url: str = "https://api.navy/v1"
@@ -63,6 +65,11 @@ class Settings(BaseSettings):
     defillama_hacks_url: str = "https://api.llama.fi/hacks"
     defillama_protocols_url: str = "https://api.llama.fi/protocols"
     scout_default_interval_seconds: int = 900
+    scout_autopilot_enabled: bool = False
+    scout_autopilot_per_chain_limit: int = 3
+    scout_autopilot_min_tvl_usd: float = 1_000_000
+    scout_autopilot_dedupe_window_hours: int = 24
+    scout_autopilot_process_queued: bool = True
     rsshub_base_url: str | None = None
     helius_api_key: str | None = None
     helius_rpc_url: str | None = None

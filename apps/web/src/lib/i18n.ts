@@ -1,4 +1,4 @@
-import type { AuditState, Chain, Finding, Tier } from "@wr3/shared";
+import type { AuditState, Chain, Finding } from "@wr3/shared";
 
 export const chainLabels: Record<Chain, string> = {
   ethereum: "Ethereum",
@@ -44,13 +44,6 @@ export const exploitabilityLabels: Record<Finding["exploitability"], string> = {
   dismissed: "отклонено"
 };
 
-export const tierLabels: Record<Tier, string> = {
-  free: "Бесплатный",
-  hobby: "Хобби",
-  team: "Команда",
-  pro: "Про"
-};
-
 export const scoreAxisLabels = {
   code_security_score: "Безопасность кода",
   centralization_score: "Централизация",
@@ -64,9 +57,14 @@ export const genericStatusLabels: Record<string, string> = {
   failed: "ошибка",
   installed: "установлено",
   missing_required: "нет обязательного инструмента",
+  broken_required: "обязательный инструмент сломан",
+  broken_optional: "необязательный инструмент сломан",
   skipped_optional: "необязательный инструмент пропущен",
   ready: "готово",
   partial: "частично готово",
+  success: "успешно",
+  skipped: "пропущено",
+  not_started: "не запускалось",
   configured: "подключено",
   free_fallback: "бесплатный резерв",
   manual: "ручной режим",
@@ -159,7 +157,6 @@ const findingText: Record<string, string> = {
 
 const limitationLabels: Record<string, string> = {
   demo_data: "демо-данные",
-  poc_requires_paid_tier: "PoC доступен только на платном тарифе",
   anonymous_owner_token_required_for_private_access: "для приватного доступа нужен токен владельца",
   zdr_required_for_security_triage: "для security-триажа требуется ZDR-маршрут",
   openrouter_zdr_route_requested: "OpenRouter запрошен в ZDR-режиме",
@@ -183,8 +180,7 @@ const limitationLabels: Record<string, string> = {
   third_party_scan_public_poc_disabled: "для стороннего скана публичный PoC выключен",
   public_claims_require_human_review: "публичные заявления требуют ручного ревью",
   adversarial_input_detected: "обнаружены признаки prompt-injection",
-  verified_source_pull_failed_upload_source: "не удалось подтянуть verified source, нужен исходный код",
-  raw_outputs_require_paid_tier_artifact_access: "сырые выводы требуют платный доступ владельца"
+  verified_source_pull_failed_upload_source: "не удалось подтянуть verified source, нужен исходный код"
 };
 
 export function tFindingText(value: string | null | undefined): string {
@@ -210,7 +206,7 @@ export function tLimitation(value: string): string {
   if (value.startsWith("llm_triage_provider_http_")) {
     const status = value.match(/http_(\d+)/)?.[1] ?? "ошибка";
     if (status === "403") {
-      return "ИИ-провайдер отказал в доступе к модели, проверь тариф/доступ к Claude Opus 4.7";
+      return "ИИ-провайдер отказал в доступе к модели, проверь доступ к Claude Opus 4.7";
     }
     if (status === "429") {
       return "ИИ-провайдер вернул лимит запросов, wr3 безопасно перешёл на детерминированный триаж";
@@ -223,9 +219,6 @@ export function tLimitation(value: string): string {
   }
   if (value.includes("_raw_output_artifact_requires_encryption")) {
     return "для сохранения сырого вывода нужен ключ шифрования артефактов";
-  }
-  if (value.includes("_billing_verification_stub")) {
-    return "проверка тарифа пока работает в MVP-режиме";
   }
   return value.replaceAll("_", " ");
 }

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from wr3_api.core.config import get_settings
-from wr3_api.domain.enums import Chain, Severity, Tier
+from wr3_api.domain.enums import Chain, Severity
 from wr3_api.domain.schemas import AuditEvent, AuditRecord, EngineRunSummary, Finding
 from wr3_api.services.artifacts import ArtifactEncryptionRequired, ArtifactVault
 from wr3_api.services.sandbox import SandboxPolicy
@@ -45,8 +45,6 @@ class FoundryPocWorker:
         started = time.perf_counter()
         if record.request.chain == Chain.SOLANA:
             return self._skipped(started, candidates, "solana_poc_uses_trident_not_foundry")
-        if record.request.tier not in {Tier.TEAM, Tier.PRO}:
-            return self._skipped(started, candidates, "poc_requires_team_or_pro_tier")
         if not candidates:
             return self._skipped(started, candidates, "poc_no_high_or_critical_candidates")
         decision = self._sandbox_policy.validate_argv(["forge", "test", "--json"])

@@ -17,11 +17,11 @@ insurance product, active rescue system, or public accusation engine.
 - Safety/legal guardrails.
 - Owner-token/dev-header auth boundary, optional SIWE signature verification,
   and email magic-link request/verify lifecycle.
-- Server-side tier policy for Free/Hobby/Team/Pro with depth caps and degraded
-  quota mode.
+- Unrestricted local audit mode: no plan selector, quota degradation, or
+  feature tier gate.
 - Sandbox command allowlist for generated Foundry/Medusa/ItyFuzz commands.
 - Local deterministic RAG scaffold and optional pgvector schema.
-- Telegram `/scan`, billing, disclosure, watchlist, webhook delivery toggle, and
+- Telegram `/scan`, disclosure, watchlist, webhook delivery toggle, and
   benchmark runner.
 - Telegram initData verification for Mini App auth bridge.
 - Mobile-first `/tg` web route for Telegram Mini App top-of-funnel scan flow.
@@ -35,7 +35,7 @@ insurance product, active rescue system, or public accusation engine.
 - Redis/Celery deployment and async worker operations.
 - Provider-tuned LLM prompts and cost calibration.
 - Real Medusa/ItyFuzz/Trident fuzzing execution.
-- TON billing integration and production Telegram alert delivery.
+- Production Telegram alert delivery.
 - Full DeFiHackLabs/SmartBugs/sealevel benchmark dataset wiring.
 
 ## Explicit Non-Goals

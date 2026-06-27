@@ -77,8 +77,8 @@ npm run site:smoke
 
 The site smoke command drives the actual browser UI: token risk check, Bug
 Bounty safe scan, Mini App scan/Bounty, dashboard, tools, integrations,
-disclosure, billing, and Telegram emulator. It writes screenshots and a JSON
-report to `artifacts/site-smoke/`.
+disclosure, and Telegram emulator. It writes screenshots and a JSON report to
+`artifacts/site-smoke/`.
 
 See also:
 

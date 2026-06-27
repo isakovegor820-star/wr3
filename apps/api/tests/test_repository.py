@@ -50,7 +50,6 @@ def test_postgres_schema_file_contains_core_tables():
         "engine_runs",
         "findings",
         "artifacts",
-        "subscriptions",
         "disclosure_cases",
         "benchmark_runs",
         "watchlist_entries",

@@ -2,14 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, ExternalLink, Loader2, Play, Radar, ShieldCheck } from "lucide-react";
-import type { Chain, Tier } from "@wr3/shared";
-import { chainLabels, tierLabels } from "@/lib/i18n";
+import { Activity, ExternalLink, Loader2, Play, Power, Radar, RefreshCw, ShieldCheck, Square } from "lucide-react";
+import type { Chain } from "@wr3/shared";
+import { chainLabels } from "@/lib/i18n";
 import {
   discoverScoutTargets,
+  getScoutAutopilotStatus,
   getScoutReviewQueue,
+  runScoutAutopilotNow,
   runScoutAllNetworks,
   runScoutOnce,
+  startScoutAutopilot,
+  stopScoutAutopilot,
+  type ScoutAutopilotStatus,
   type ScoutQueuedAudit,
   type ScoutReviewItem,
   type ScoutReviewQueue,
@@ -24,8 +29,6 @@ const scoutChains: { value: Chain | ""; label: string }[] = [
   { value: "arbitrum", label: "ARB" },
   { value: "solana", label: "Solana beta" }
 ];
-
-const scoutTiers: Tier[] = ["free", "hobby", "team", "pro"];
 
 function shortAddress(value: string) {
   if (value.length <= 18) return value;
@@ -42,18 +45,36 @@ function formatTvl(value: number | null) {
   }).format(value);
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return "ещё не было";
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "2-digit"
+  }).format(new Date(value));
+}
+
+function formatInterval(seconds: number) {
+  if (seconds >= 3600) return `${Math.round(seconds / 3600)} ч`;
+  if (seconds >= 60) return `${Math.round(seconds / 60)} мин`;
+  return `${seconds} сек`;
+}
+
 export function ScoutClient({ compact = false }: { compact?: boolean }) {
   const [targets, setTargets] = useState<ScoutTarget[]>([]);
   const [queued, setQueued] = useState<ScoutQueuedAudit[]>([]);
   const [reviewQueue, setReviewQueue] = useState<ScoutReviewQueue | null>(null);
+  const [autopilotStatus, setAutopilotStatus] = useState<ScoutAutopilotStatus | null>(null);
   const [chain, setChain] = useState<Chain | "">("");
   const [limit, setLimit] = useState(3);
   const [minTvl, setMinTvl] = useState(1_000_000);
-  const [tier, setTier] = useState<Tier>("team");
   const [isLoadingTargets, setIsLoadingTargets] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isRunningAll, setIsRunningAll] = useState(false);
+  const [autopilotAction, setAutopilotAction] = useState<"refresh" | "start" | "stop" | "run-now" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [lastLimitations, setLastLimitations] = useState<string[]>([]);
 
   const chainFilter = useMemo(() => (chain ? [chain] : []), [chain]);
@@ -83,8 +104,7 @@ export function ScoutClient({ compact = false }: { compact?: boolean }) {
         limit,
         min_tvl_usd: minTvl,
         chains: chainFilter,
-        requested_depth: "preliminary",
-        tier
+        requested_depth: "preliminary"
       });
       setTargets(result.targets);
       setQueued(result.audits);
@@ -105,8 +125,7 @@ export function ScoutClient({ compact = false }: { compact?: boolean }) {
         per_chain_limit: limit,
         min_tvl_usd: minTvl,
         chains: chainFilter,
-        requested_depth: "deep",
-        tier
+        requested_depth: "deep"
       });
       setTargets(result.targets);
       setQueued(result.audits);
@@ -119,6 +138,62 @@ export function ScoutClient({ compact = false }: { compact?: boolean }) {
     }
   }
 
+  async function loadAutopilotStatus() {
+    setError(null);
+    setAutopilotAction("refresh");
+    try {
+      const status = await getScoutAutopilotStatus();
+      setAutopilotStatus(status);
+      if (status.last_result) {
+        setTargets(status.last_result.targets);
+        setQueued(status.last_result.audits);
+        setLastLimitations(status.last_result.limitations);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Статус автопилота не загрузился");
+    } finally {
+      setAutopilotAction(null);
+    }
+  }
+
+  async function changeAutopilot(action: "start" | "stop" | "run-now") {
+    setError(null);
+    setNotice(null);
+    setAutopilotAction(action);
+    try {
+      if (action === "start") {
+        const status = await startScoutAutopilot();
+        setAutopilotStatus(status);
+        setNotice("Автопилот включён. Он будет крутить passive scout-cycle по расписанию.");
+      }
+      if (action === "stop") {
+        const status = await stopScoutAutopilot();
+        setAutopilotStatus(status);
+        setNotice("Автопилот выключен. Уже созданные аудиты остаются в очереди.");
+      }
+      if (action === "run-now") {
+        const result = await runScoutAutopilotNow({
+          per_chain_limit: limit,
+          min_tvl_usd: minTvl,
+          chains: chainFilter,
+          requested_depth: "deep",
+          process_queued: true
+        });
+        setTargets(result.targets);
+        setQueued(result.audits);
+        setLastLimitations(result.limitations);
+        setNotice(`Автопилот прошёл сейчас: найдено ${result.discovered_count}, поставлено ${result.queued_count}.`);
+        await loadReviewQueue();
+        const status = await getScoutAutopilotStatus();
+        setAutopilotStatus(status);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Действие автопилота не выполнилось");
+    } finally {
+      setAutopilotAction(null);
+    }
+  }
+
   async function loadReviewQueue() {
     const queue = await getScoutReviewQueue(150);
     setReviewQueue(queue);
@@ -127,6 +202,7 @@ export function ScoutClient({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     void loadTargets();
     void loadReviewQueue();
+    void loadAutopilotStatus();
   }, []);
 
   return (
@@ -146,6 +222,70 @@ export function ScoutClient({ compact = false }: { compact?: boolean }) {
           wr3 сортирует отчёты на “можно писать”, “проверить вручную” и “пропустить”.
         </span>
       </div>
+
+      <section className="scout-autopilot-panel" aria-label="Статус Scout Autopilot">
+        <div className="scout-section-head">
+          <strong>Scout Autopilot</strong>
+          <span>{autopilotStatus?.running ? "работает" : "остановлен"}</span>
+        </div>
+        <div className="autopilot-status-grid">
+          <div>
+            <span>Статус</span>
+            <strong>{autopilotStatus?.running ? "Активен" : autopilotStatus?.enabled ? "Включён, ждёт цикл" : "Выключен"}</strong>
+          </div>
+          <div>
+            <span>Интервал</span>
+            <strong>{formatInterval(autopilotStatus?.interval_seconds ?? 900)}</strong>
+          </div>
+          <div>
+            <span>Циклов</span>
+            <strong>{autopilotStatus?.cycle_count ?? 0}</strong>
+          </div>
+          <div>
+            <span>Всего поставлено</span>
+            <strong>{autopilotStatus?.queued_total ?? 0}</strong>
+          </div>
+          <div>
+            <span>Последний запуск</span>
+            <strong>{formatDateTime(autopilotStatus?.last_run_at ?? null)}</strong>
+          </div>
+          <div>
+            <span>Следующий запуск</span>
+            <strong>{formatDateTime(autopilotStatus?.next_run_at ?? null)}</strong>
+          </div>
+        </div>
+        {autopilotStatus?.last_error ? <p className="error-box">{autopilotStatus.last_error}</p> : null}
+        {autopilotStatus?.last_result ? (
+          <p className="autopilot-result-line">
+            Последний цикл: найдено {autopilotStatus.last_result.discovered_count}, поставлено {autopilotStatus.last_result.queued_count},
+            пропущено {autopilotStatus.last_result.skipped_count}.
+          </p>
+        ) : null}
+        <div className="cockpit-actions scout-actions">
+          <button type="button" onClick={() => void changeAutopilot("start")} disabled={autopilotAction !== null || autopilotStatus?.running}>
+            {autopilotAction === "start" ? <Loader2 className="spin" aria-hidden="true" size={17} /> : <Power aria-hidden="true" size={17} />}
+            Включить автопилот
+          </button>
+          <button type="button" className="secondary-button" onClick={() => void changeAutopilot("stop")} disabled={autopilotAction !== null || !autopilotStatus?.running}>
+            {autopilotAction === "stop" ? <Loader2 className="spin" aria-hidden="true" size={17} /> : <Square aria-hidden="true" size={17} />}
+            Выключить
+          </button>
+          <button type="button" onClick={() => void changeAutopilot("run-now")} disabled={autopilotAction !== null}>
+            {autopilotAction === "run-now" ? <Loader2 className="spin" aria-hidden="true" size={17} /> : <Radar aria-hidden="true" size={17} />}
+            Запустить сейчас
+          </button>
+          <button type="button" className="secondary-button" onClick={() => void loadAutopilotStatus()} disabled={autopilotAction !== null}>
+            {autopilotAction === "refresh" ? <Loader2 className="spin" aria-hidden="true" size={17} /> : <RefreshCw aria-hidden="true" size={17} />}
+            Обновить статус
+          </button>
+        </div>
+        {notice ? <p className="empty-state">{notice}</p> : null}
+        {autopilotStatus?.limitations.length ? (
+          <div className="scout-limits">
+            {autopilotStatus.limitations.map((item) => <span key={item}>{item}</span>)}
+          </div>
+        ) : null}
+      </section>
 
       <div className="scout-controls">
         <label>
@@ -173,12 +313,6 @@ export function ScoutClient({ compact = false }: { compact?: boolean }) {
             value={minTvl}
             onChange={(event) => setMinTvl(Number(event.target.value))}
           />
-        </label>
-        <label>
-          Тариф скана
-          <select value={tier} onChange={(event) => setTier(event.target.value as Tier)}>
-            {scoutTiers.map((item) => <option key={item} value={item}>{tierLabels[item]}</option>)}
-          </select>
         </label>
       </div>
 
@@ -249,17 +383,6 @@ export function ScoutClient({ compact = false }: { compact?: boolean }) {
       </div>
 
       <ScoutReviewQueuePanel queue={reviewQueue} />
-
-      <div className="scout-runbook">
-        <div>
-          <strong>Как держать локально 24/7</strong>
-          <code>npm run scout:loop</code>
-        </div>
-        <p>
-          Команда будет раз в 15 минут брать цели по всем сетям, создавать приватные deep-аудиты и складывать результат в review queue.
-          Отправка в support остаётся ручной, потому что перед письмом нужен scope и human review.
-        </p>
-      </div>
 
       {lastLimitations.length ? (
         <div className="scout-limits">

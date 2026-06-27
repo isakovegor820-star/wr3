@@ -7,6 +7,8 @@ from wr3_api.api.routes.audits import service as audit_service
 from wr3_api.domain.enums import Chain, UserIntent, Visibility
 from wr3_api.domain.schemas import (
     CreateAuditRequest,
+    ScoutAutopilotRunRequest,
+    ScoutAutopilotStatus,
     ScoutQueuedAudit,
     ScoutReviewItem,
     ScoutReviewQueue,
@@ -17,9 +19,11 @@ from wr3_api.domain.schemas import (
 )
 from wr3_api.services.auth import AuthContext
 from wr3_api.services.dispatcher import dispatch_audit_processing
+from wr3_api.services.scout_autopilot import ScoutAutopilot
 from wr3_api.services.target_discovery import TargetDiscoveryService
 
 router = APIRouter(prefix="/v1/monitoring", tags=["monitoring"])
+scout_autopilot = ScoutAutopilot(audit_service=audit_service)
 
 
 @router.get("/targets", response_model=list[ScoutTarget])
@@ -155,6 +159,41 @@ async def review_queue(
         "total": len(rows),
     }
     return queue
+
+
+@router.get("/scout/autopilot", response_model=ScoutAutopilotStatus)
+async def scout_autopilot_status() -> ScoutAutopilotStatus:
+    return scout_autopilot.status()
+
+
+@router.post("/scout/autopilot/start", response_model=ScoutAutopilotStatus)
+async def start_scout_autopilot(
+    actor: AuthContext = Depends(get_optional_auth),
+) -> ScoutAutopilotStatus:
+    _require_reviewer(actor)
+    return await scout_autopilot.start()
+
+
+@router.post("/scout/autopilot/stop", response_model=ScoutAutopilotStatus)
+async def stop_scout_autopilot(
+    actor: AuthContext = Depends(get_optional_auth),
+) -> ScoutAutopilotStatus:
+    _require_reviewer(actor)
+    return await scout_autopilot.stop()
+
+
+@router.post("/scout/autopilot/run-now", response_model=ScoutRunResult)
+async def run_scout_autopilot_now(
+    request: ScoutAutopilotRunRequest | None = None,
+    actor: AuthContext = Depends(get_optional_auth),
+) -> ScoutRunResult:
+    _require_reviewer(actor)
+    return await scout_autopilot.run_now(request)
+
+
+def _require_reviewer(actor: AuthContext) -> None:
+    if not actor.is_reviewer:
+        raise HTTPException(status_code=403, detail="reviewer_access_required_for_scout_autopilot")
 
 
 async def _queue_targets(

@@ -9,8 +9,6 @@ const categoryLabels: Record<string, string> = {
   llm_triage: "ИИ-триаж",
   rag: "База знаний",
   telegram: "Telegram",
-  billing: "Биллинг",
-  telegram_payments: "Платежи в Telegram",
   monitoring: "Мониторинг",
   observability: "Наблюдаемость",
   solana: "Solana beta",

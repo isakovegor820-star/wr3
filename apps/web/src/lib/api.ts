@@ -21,6 +21,12 @@ function apiBaseUrl() {
   return CLIENT_API_BASE;
 }
 
+export function apiAssetUrl(path?: string | null) {
+  if (!path) return "#";
+  if (path.startsWith("http")) return path;
+  return `${apiBaseUrl()}${path}`;
+}
+
 export type CreateAuditInput = {
   chain: Chain;
   address: string;
@@ -101,6 +107,22 @@ export type CreateAuditResponse = {
   public_report_token: string | null;
 };
 
+export type RawOutputEngineMetadata = {
+  engine: string;
+  status: string;
+  duration_ms: number;
+  artifact_uri: string | null;
+  error: string | null;
+};
+
+export type RawOutputsMetadata = {
+  audit_id: string;
+  gated: boolean;
+  reason: string;
+  owner_verified: boolean;
+  engines: RawOutputEngineMetadata[];
+};
+
 export type DashboardAudit = {
   audit_id: string;
   owner_access_token: string | null;
@@ -130,16 +152,6 @@ export type DashboardAudit = {
   can_create_disclosure: boolean;
 };
 
-export type BillingPlan = {
-  tier: Tier;
-  name: string;
-  price_usd_month: number;
-  scan_quota: string;
-  retention_days: number;
-  poc_access: boolean;
-  notes: string[];
-};
-
 export type TelegramEmulatorResponse = {
   ok: boolean;
   reply: string;
@@ -155,9 +167,55 @@ export type DisclosureCase = {
   id: string;
   finding_id: string;
   status: string;
+  audit_id: string | null;
+  project_name: string | null;
+  project_contact: string | null;
+  contact_source: string | null;
+  readiness_state: string;
+  candidate_detected: boolean;
+  confirmed_by_poc: boolean;
+  pdfs_generated: boolean;
+  needs_human_approval: boolean;
+  approved_to_contact: boolean;
+  manually_sent: boolean;
+  dismissed: boolean;
+  draft_message: string | null;
+  web_url: string | null;
+  internal_pdf_url: string | null;
+  external_pdf_url: string | null;
+  limitations: string[];
   contact_log: string[];
   deadline_next: string;
   created_at: string;
+};
+
+export type DisclosurePacket = {
+  case_id: string;
+  audit_id: string | null;
+  finding_id: string;
+  readiness_state: string;
+  candidate_detected: boolean;
+  confirmed_by_poc: boolean;
+  pdfs_generated: boolean;
+  needs_human_approval: boolean;
+  approved_to_contact: boolean;
+  manually_sent: boolean;
+  dismissed: boolean;
+  project_name: string | null;
+  chain: Chain | null;
+  address: string | null;
+  bug_type: string | null;
+  severity: Severity | null;
+  location_label: string | null;
+  confidence_reason: string | null;
+  bounty_acceptance_reason: string | null;
+  official_contact: string | null;
+  contact_source: string | null;
+  web_url: string | null;
+  internal_pdf_url: string | null;
+  external_pdf_url: string | null;
+  draft_message: string | null;
+  limitations: string[];
 };
 
 export type AuthSession = {
@@ -215,6 +273,23 @@ export type ScoutRunResult = {
   skipped_count: number;
   targets: ScoutTarget[];
   audits: ScoutQueuedAudit[];
+  limitations: string[];
+};
+
+export type ScoutAutopilotStatus = {
+  enabled: boolean;
+  running: boolean;
+  interval_seconds: number;
+  per_chain_limit: number;
+  min_tvl_usd: number;
+  dedupe_window_hours: number;
+  process_queued: boolean;
+  cycle_count: number;
+  queued_total: number;
+  last_run_at: string | null;
+  next_run_at: string | null;
+  last_error: string | null;
+  last_result: ScoutRunResult | null;
   limitations: string[];
 };
 
@@ -319,6 +394,12 @@ export async function getFindings(id: string, ownerToken?: string): Promise<Find
   });
 }
 
+export async function getRawOutputsMetadata(id: string, ownerToken?: string): Promise<RawOutputsMetadata> {
+  return apiFetch(withOwnerToken(`/v1/audits/${id}/raw-outputs`, ownerToken), {
+    headers: accessHeaders(ownerToken)
+  });
+}
+
 export async function getReportMarkdown(id: string, ownerToken?: string): Promise<string> {
   const response = await fetch(`${apiBaseUrl()}${withOwnerToken(`/v1/audits/${id}/report`, ownerToken)}`, {
     cache: "no-store",
@@ -406,7 +487,6 @@ export async function runScoutOnce(input: {
   chains?: Chain[];
   dry_run?: boolean;
   requested_depth?: "preliminary" | "standard" | "deep";
-  tier?: Tier;
 }): Promise<ScoutRunResult> {
   return apiFetch("/v1/monitoring/scout/run-once", {
     method: "POST",
@@ -415,8 +495,7 @@ export async function runScoutOnce(input: {
       min_tvl_usd: input.min_tvl_usd ?? 0,
       chains: input.chains ?? [],
       dry_run: input.dry_run ?? false,
-      requested_depth: input.requested_depth ?? "preliminary",
-      tier: input.tier ?? "free"
+      requested_depth: input.requested_depth ?? "preliminary"
     })
   });
 }
@@ -427,7 +506,6 @@ export async function runScoutAllNetworks(input: {
   chains?: Chain[];
   dry_run?: boolean;
   requested_depth?: "preliminary" | "standard" | "deep";
-  tier?: Tier;
 }): Promise<ScoutRunResult> {
   return apiFetch("/v1/monitoring/scout/run-all", {
     method: "POST",
@@ -436,8 +514,7 @@ export async function runScoutAllNetworks(input: {
       min_tvl_usd: input.min_tvl_usd ?? 0,
       chains: input.chains ?? [],
       dry_run: input.dry_run ?? false,
-      requested_depth: input.requested_depth ?? "deep",
-      tier: input.tier ?? "team"
+      requested_depth: input.requested_depth ?? "deep"
     })
   });
 }
@@ -446,9 +523,50 @@ export async function getScoutReviewQueue(limit = 100): Promise<ScoutReviewQueue
   return apiFetch(`/v1/monitoring/review-queue?limit=${limit}`);
 }
 
+export async function getScoutAutopilotStatus(): Promise<ScoutAutopilotStatus> {
+  return apiFetch("/v1/monitoring/scout/autopilot");
+}
+
+export async function startScoutAutopilot(): Promise<ScoutAutopilotStatus> {
+  return apiFetch("/v1/monitoring/scout/autopilot/start", {
+    method: "POST",
+    headers: { "x-wr3-reviewer": "true" }
+  });
+}
+
+export async function stopScoutAutopilot(): Promise<ScoutAutopilotStatus> {
+  return apiFetch("/v1/monitoring/scout/autopilot/stop", {
+    method: "POST",
+    headers: { "x-wr3-reviewer": "true" }
+  });
+}
+
+export async function runScoutAutopilotNow(input: {
+  per_chain_limit?: number;
+  min_tvl_usd?: number;
+  chains?: Chain[];
+  requested_depth?: "preliminary" | "standard" | "deep";
+  dedupe_window_hours?: number;
+  process_queued?: boolean;
+}): Promise<ScoutRunResult> {
+  return apiFetch("/v1/monitoring/scout/autopilot/run-now", {
+    method: "POST",
+    headers: { "x-wr3-reviewer": "true" },
+    body: JSON.stringify({
+      per_chain_limit: input.per_chain_limit ?? 3,
+      min_tvl_usd: input.min_tvl_usd ?? 1_000_000,
+      chains: input.chains ?? [],
+      requested_depth: input.requested_depth ?? "deep",
+      dedupe_window_hours: input.dedupe_window_hours ?? 24,
+      process_queued: input.process_queued ?? true
+    })
+  });
+}
+
 export async function telegramEmulatorCommand(command: string, telegramUserId = 1508): Promise<TelegramEmulatorResponse> {
   return apiFetch("/v1/telegram/webhook", {
     method: "POST",
+    headers: { "x-wr3-local-emulator": "true" },
     body: JSON.stringify({
       message: {
         text: command,
@@ -456,16 +574,6 @@ export async function telegramEmulatorCommand(command: string, telegramUserId = 
         chat: { id: telegramUserId, type: "private" }
       }
     })
-  });
-}
-
-export async function getBillingPlans(): Promise<BillingPlan[]> {
-  return apiFetch("/v1/billing/plans");
-}
-
-export async function getLocalSubscription(user = "local-billing"): Promise<unknown> {
-  return apiFetch("/v1/billing/subscription", {
-    headers: { "x-wr3-user": user }
   });
 }
 
@@ -481,6 +589,56 @@ export async function createDisclosureCase(input: {
   scope_note: string;
 }): Promise<DisclosureCase> {
   return apiFetch("/v1/disclosure-cases", {
+    method: "POST",
+    headers: { "x-wr3-reviewer": "true" },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function prepareDisclosurePacket(input: {
+  audit_id: string;
+  finding_id?: string | null;
+  project_name?: string | null;
+  official_contact: string;
+  contact_source: string;
+  scope_note?: string | null;
+}): Promise<DisclosurePacket> {
+  return apiFetch("/v1/disclosure-cases/prepare", {
+    method: "POST",
+    headers: { "x-wr3-reviewer": "true" },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function approveDisclosurePacket(caseId: string, input: { note?: string } = {}): Promise<DisclosurePacket> {
+  return apiFetch(`/v1/disclosure-cases/${caseId}/approve`, {
+    method: "POST",
+    headers: { "x-wr3-reviewer": "true" },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function markDisclosureManuallySent(
+  caseId: string,
+  input: { channel?: string; note?: string } = {}
+): Promise<DisclosurePacket> {
+  return apiFetch(`/v1/disclosure-cases/${caseId}/manual-sent`, {
+    method: "POST",
+    headers: { "x-wr3-reviewer": "true" },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function requestDisclosureNeedsReview(caseId: string, input: { note?: string } = {}): Promise<DisclosurePacket> {
+  return apiFetch(`/v1/disclosure-cases/${caseId}/needs-review`, {
+    method: "POST",
+    headers: { "x-wr3-reviewer": "true" },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function dismissDisclosurePacket(caseId: string, input: { note?: string } = {}): Promise<DisclosurePacket> {
+  return apiFetch(`/v1/disclosure-cases/${caseId}/dismiss`, {
     method: "POST",
     headers: { "x-wr3-reviewer": "true" },
     body: JSON.stringify(input)

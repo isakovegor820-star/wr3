@@ -5,10 +5,10 @@ from datetime import timedelta
 from hmac import compare_digest
 from uuid import UUID
 
-from wr3_api.adapters.base import EngineAdapter, EngineRunOptions, NormalizedSource
+from wr3_api.adapters.base import EngineAdapter, EngineRunOptions, EngineRunResult, NormalizedSource
 from wr3_api.adapters.registry import default_adapters
 from wr3_api.core.config import get_settings
-from wr3_api.domain.enums import AuditState, Chain, Exploitability, Severity
+from wr3_api.domain.enums import AuditState, Chain, Exploitability, PocStatus, Severity, UserIntent
 from wr3_api.domain.safety import (
     detect_prompt_injection,
     redact_findings_for_public,
@@ -25,6 +25,10 @@ from wr3_api.domain.schemas import (
     DisclosureContactLogRequest,
     DisclosureCase,
     DisclosureCaseRequest,
+    DisclosureManualSentRequest,
+    DisclosurePacketActionRequest,
+    DisclosurePacketRequest,
+    DisclosurePacketResponse,
     EngineRunSummary,
     Finding,
     FindingReviewRequest,
@@ -69,6 +73,15 @@ DISCLOSURE_DEADLINE_DAYS: dict[str, int] = {
     "full_disclosure_allowed": 180,
     "resolved": 0,
     "closed": 0,
+}
+
+OFFICIAL_CONTACT_SOURCES = {
+    "bug_bounty_portal",
+    "security_txt",
+    "github_security_policy",
+    "security_md",
+    "official_website_email",
+    "official_website_contact_form",
 }
 
 
@@ -162,6 +175,27 @@ class AuditService:
 
     def save_record(self, record: AuditRecord) -> None:
         self._audit_repository.save(record)
+
+    def find_recent_monitoring_audit(
+        self,
+        *,
+        chain: Chain,
+        address: str,
+        window_hours: int,
+    ) -> AuditRecord | None:
+        cutoff = utc_now() - timedelta(hours=window_hours)
+        normalized_address = address.lower()
+        for record in sorted(self._audit_repository.list_records(), key=lambda item: item.updated_at, reverse=True):
+            if record.updated_at < cutoff:
+                continue
+            if record.request.user_intent != UserIntent.MONITORING:
+                continue
+            if record.request.chain != chain:
+                continue
+            if (record.request.address or "").lower() != normalized_address:
+                continue
+            return record
+        return None
 
     def list_audits_for_dashboard(
         self,
@@ -281,8 +315,8 @@ class AuditService:
         self._ensure_owner(record, access)
         return {
             "audit_id": str(record.audit_id),
-            "gated": True,
-            "reason": "raw_outputs_require_paid_tier_artifact_access",
+            "gated": False,
+            "reason": "owner_verified_private_artifact_access",
             "owner_verified": True,
             "engines": [
                 {
@@ -335,6 +369,8 @@ class AuditService:
             raise AuditAccessDenied("reviewer_access_required_for_disclosure_case")
         case = DisclosureCase(
             finding_id=request.finding_id,
+            project_contact=request.project_contact,
+            scope_note=request.scope_note,
             contact_log=[
                 "Day 0: private responsible disclosure case opened.",
                 f"Contact target captured: {request.project_contact}",
@@ -357,6 +393,63 @@ class AuditService:
             raise AuditAccessDenied("reviewer_access_required_for_disclosure_case")
         return self._disclosure_repository.list_cases()
 
+    def get_disclosure_packet(self, case_id: str, actor: AuthContext | None = None) -> DisclosurePacketResponse:
+        case = self.get_disclosure_case(case_id, actor)
+        return self._packet_response(case)
+
+    def prepare_disclosure_packet(
+        self,
+        request: DisclosurePacketRequest,
+        actor: AuthContext | None = None,
+    ) -> DisclosurePacketResponse:
+        if actor is None or not actor.is_reviewer:
+            raise AuditAccessDenied("reviewer_access_required_for_disclosure_packet")
+        record = self.get_record(request.audit_id)
+        finding = self._finding_for_packet(record, request.finding_id)
+        existing = next(
+            (case for case in self._disclosure_repository.list_cases() if case.finding_id == finding.id),
+            None,
+        )
+        case = existing or DisclosureCase(finding_id=finding.id)
+        case.audit_id = record.audit_id
+        case.project_name = request.project_name or case.project_name or finding.contract.name
+        case.project_contact = request.official_contact
+        case.contact_source = request.contact_source
+        case.scope_note = request.scope_note
+        case.web_url = f"{self._settings.web_base_url}/audits/{record.audit_id}?owner_token={record.owner_access_token}"
+        case.internal_pdf_url = f"/v1/disclosure-cases/{case.id}/reports/internal.pdf"
+        case.external_pdf_url = f"/v1/disclosure-cases/{case.id}/reports/external.pdf"
+        case.internal_report_markdown = self._renderer.render_internal_disclosure_markdown(record, finding, case)
+        case.external_report_markdown = self._renderer.render_external_disclosure_markdown(record, finding, case)
+        case.draft_message = self._safe_disclosure_draft(record, finding, case)
+        case.pdfs_generated = True
+        case.candidate_detected = True
+        case.confirmed_by_poc = self._is_confirmed_by_poc_or_fork(finding)
+        case.approved_to_contact = False
+        case.manually_sent = False
+        case.dismissed = False
+        case.limitations = self._packet_limitations(record, finding, case)
+        case.needs_human_approval = (
+            case.confirmed_by_poc
+            and self._has_clear_impact(finding)
+            and self._official_contact_allowed(case.contact_source)
+        )
+        if case.needs_human_approval:
+            case.readiness_state = "needs_human_approval"
+        elif case.confirmed_by_poc:
+            case.readiness_state = "pdfs_generated"
+        else:
+            case.readiness_state = "candidate_detected"
+        case.status = case.readiness_state
+        case.contact_log.append(
+            f"{utc_now().date().isoformat()} [packet]: disclosure packet prepared; state={case.readiness_state}"
+        )
+        case.contact_log.append(
+            f"{utc_now().date().isoformat()} [draft]: safe draft generated; no external message sent"
+        )
+        self._disclosure_repository.save(case)
+        return self._packet_response(case, record=record, finding=finding)
+
     def append_disclosure_contact(
         self,
         case_id: str,
@@ -367,6 +460,204 @@ class AuditService:
         case.contact_log.append(f"{utc_now().date().isoformat()} [{request.channel}]: {request.message}")
         self._disclosure_repository.save(case)
         return case
+
+    def approve_disclosure_packet(
+        self,
+        case_id: str,
+        request: DisclosurePacketActionRequest,
+        actor: AuthContext | None = None,
+    ) -> DisclosurePacketResponse:
+        case = self.get_disclosure_case(case_id, actor)
+        if not case.needs_human_approval:
+            raise ValueError("disclosure_packet_not_ready_for_approval")
+        case.needs_human_approval = False
+        case.approved_to_contact = True
+        case.readiness_state = "approved_to_contact"
+        case.status = "approved_to_contact"
+        if request.note:
+            case.contact_log.append(f"{utc_now().date().isoformat()} [approve-note]: {request.note}")
+        case.contact_log.append(f"{utc_now().date().isoformat()} [approve]: human approved manual contact")
+        self._disclosure_repository.save(case)
+        return self._packet_response(case)
+
+    def mark_disclosure_manually_sent(
+        self,
+        case_id: str,
+        request: DisclosureManualSentRequest,
+        actor: AuthContext | None = None,
+    ) -> DisclosurePacketResponse:
+        case = self.get_disclosure_case(case_id, actor)
+        if not case.approved_to_contact:
+            raise ValueError("disclosure_packet_requires_approval_before_manual_send")
+        case.manually_sent = True
+        case.readiness_state = "manually_sent"
+        case.status = "manually_sent"
+        case.contact_log.append(
+            f"{utc_now().date().isoformat()} [{request.channel}]: manual send logged; wr3 did not auto-send"
+        )
+        if request.note:
+            case.contact_log.append(f"{utc_now().date().isoformat()} [manual-send-note]: {request.note}")
+        self._disclosure_repository.save(case)
+        return self._packet_response(case)
+
+    def request_more_disclosure_review(
+        self,
+        case_id: str,
+        request: DisclosurePacketActionRequest,
+        actor: AuthContext | None = None,
+    ) -> DisclosurePacketResponse:
+        case = self.get_disclosure_case(case_id, actor)
+        case.needs_human_approval = False
+        case.approved_to_contact = False
+        case.readiness_state = "confirmed_by_poc" if case.confirmed_by_poc else "candidate_detected"
+        case.status = "needs_more_review"
+        if request.note:
+            case.contact_log.append(f"{utc_now().date().isoformat()} [needs-review]: {request.note}")
+        self._disclosure_repository.save(case)
+        return self._packet_response(case)
+
+    def dismiss_disclosure_packet(
+        self,
+        case_id: str,
+        request: DisclosurePacketActionRequest,
+        actor: AuthContext | None = None,
+    ) -> DisclosurePacketResponse:
+        case = self.get_disclosure_case(case_id, actor)
+        case.dismissed = True
+        case.needs_human_approval = False
+        case.approved_to_contact = False
+        case.readiness_state = "dismissed"
+        case.status = "dismissed"
+        if request.note:
+            case.contact_log.append(f"{utc_now().date().isoformat()} [dismiss]: {request.note}")
+        self._disclosure_repository.save(case)
+        return self._packet_response(case)
+
+    def render_disclosure_pdf(self, case_id: str, variant: str, actor: AuthContext | None = None) -> bytes:
+        case = self.get_disclosure_case(case_id, actor)
+        if variant == "internal":
+            title = "wr3 internal disclosure packet"
+            body = case.internal_report_markdown or "Internal report has not been generated."
+        elif variant == "external":
+            title = "wr3 responsible disclosure report"
+            body = case.external_report_markdown or "External report has not been generated."
+            lowered = body.lower()
+            forbidden_terms = (
+                "scam",
+                "fraud",
+                "working poc",
+                "working exploit",
+                "exploit recipe",
+                "exploit steps",
+                "mainnet exploit steps",
+            )
+            if any(term in lowered for term in forbidden_terms):
+                raise ValueError("external_report_contains_forbidden_wording")
+        else:
+            raise ValueError("unsupported_disclosure_report_variant")
+        return self._renderer.render_text_pdf(title, body)
+
+    def _finding_for_packet(self, record: AuditRecord, finding_id: str | None) -> Finding:
+        if finding_id:
+            for finding in record.findings:
+                if finding.id == finding_id:
+                    return finding
+            raise AuditNotFound(finding_id)
+        primary = self._primary_finding(record)
+        if primary is None:
+            raise AuditNotFound("audit_has_no_finding_for_disclosure_packet")
+        return primary
+
+    def _packet_response(
+        self,
+        case: DisclosureCase,
+        *,
+        record: AuditRecord | None = None,
+        finding: Finding | None = None,
+    ) -> DisclosurePacketResponse:
+        if record is None and case.audit_id is not None:
+            try:
+                record = self.get_record(case.audit_id)
+            except AuditNotFound:
+                record = None
+        if finding is None and record is not None:
+            finding = next((item for item in record.findings if item.id == case.finding_id), None)
+        assessment = finding.disclosure_assessment if finding else None
+        return DisclosurePacketResponse(
+            case_id=case.id,
+            audit_id=case.audit_id,
+            finding_id=case.finding_id,
+            readiness_state=case.readiness_state,
+            candidate_detected=case.candidate_detected,
+            confirmed_by_poc=case.confirmed_by_poc,
+            pdfs_generated=case.pdfs_generated,
+            needs_human_approval=case.needs_human_approval,
+            approved_to_contact=case.approved_to_contact,
+            manually_sent=case.manually_sent,
+            dismissed=case.dismissed,
+            project_name=case.project_name,
+            chain=record.request.chain if record else None,
+            address=record.request.address if record else None,
+            bug_type=finding.taxonomy.wr3_category if finding else None,
+            severity=finding.severity if finding else None,
+            location_label=assessment.location_label if assessment else None,
+            confidence_reason=assessment.technical_explanation if assessment else None,
+            bounty_acceptance_reason=self._bounty_acceptance_reason(record, finding, case) if record and finding else None,
+            official_contact=case.project_contact,
+            contact_source=case.contact_source,
+            web_url=case.web_url,
+            internal_pdf_url=case.internal_pdf_url,
+            external_pdf_url=case.external_pdf_url,
+            draft_message=case.draft_message,
+            limitations=case.limitations,
+        )
+
+    def _packet_limitations(self, record: AuditRecord, finding: Finding, case: DisclosureCase) -> list[str]:
+        limitations = [
+            "no_auto_support_messages",
+            "no_mainnet_broadcast",
+            "external_report_omits_raw_poc_steps",
+            "telegram_alert_omits_working_poc",
+        ]
+        if not self._is_confirmed_by_poc_or_fork(finding):
+            limitations.append("not_confirmed_by_poc_fork_or_test")
+        if not self._has_clear_impact(finding):
+            limitations.append("impact_statement_needs_review")
+        if not self._official_contact_allowed(case.contact_source):
+            limitations.append("official_contact_not_strong_enough_for_red")
+        if record.request.address is None:
+            limitations.append("source_only_target_contact_must_be_verified")
+        return limitations
+
+    def _safe_disclosure_draft(self, record: AuditRecord, finding: Finding, case: DisclosureCase) -> str:
+        target = record.request.address or finding.contract.address or record.audit_id
+        return (
+            f"Subject: responsible disclosure candidate for {record.request.chain} target {target}\n\n"
+            f"Hello {case.project_contact or 'security team'},\n\n"
+            "We are contacting you privately through what appears to be an official security channel. "
+            "wr3 identified a security candidate during passive/local/fork-only review.\n\n"
+            f"Target: {record.request.chain}:{target}\n"
+            f"Category: {finding.taxonomy.wr3_category}\n"
+            f"Severity candidate: {finding.severity}\n"
+            f"Location: {finding.disclosure_assessment.location_label}\n"
+            f"Validation: {finding.evidence.poc_status}\n\n"
+            "No mainnet transaction was broadcast, no funds were moved, and this first message does not include "
+            "transaction recipe details or raw private traces. Please confirm the official security/bounty intake "
+            "channel and whether this target is in scope.\n\n"
+            "Regards,\nwr3 research"
+        )
+
+    def _is_confirmed_by_poc_or_fork(self, finding: Finding) -> bool:
+        return finding.evidence.poc_status == PocStatus.CONFIRMED or finding.exploitability == Exploitability.CONFIRMED
+
+    def _has_clear_impact(self, finding: Finding) -> bool:
+        return bool(finding.impact and len(finding.impact.strip()) >= 24)
+
+    def _official_contact_allowed(self, source: str | None) -> bool:
+        return bool(source and source in OFFICIAL_CONTACT_SOURCES)
+
+    def _bounty_acceptance_reason(self, record: AuditRecord, finding: Finding, case: DisclosureCase) -> str:
+        return self._renderer._bounty_acceptance_reason(record, finding, case)
 
     def advance_disclosure_case(
         self,
@@ -575,6 +866,7 @@ class AuditService:
             candidates = high_risk_poc_candidates(record.findings)
             poc_result = await self._poc_worker.run(record, candidates)
             self._poc_worker.record_result(record, poc_result, candidates)
+            self._apply_poc_confirmation(record, poc_result.confirmed_finding_ids)
             if record.request.requested_depth == "deep":
                 self._transition(record, AuditState.FUZZING_RUNNING, reason="fuzzing_started")
                 fuzz_result = await self._fuzz_worker.run(record, record.findings)
@@ -603,6 +895,19 @@ class AuditService:
             record.limitations.append("high_risk_findings_require_human_review_before_public_claim")
         self._transition(record, AuditState.COMPLETED, reason="report_ready")
         self._audit_repository.save(record)
+
+    def _apply_poc_confirmation(self, record: AuditRecord, confirmed_ids: tuple[str, ...]) -> None:
+        """Write PoC confirmation back onto findings so disclosure-readiness and
+        scoring — which key off ``exploitability == CONFIRMED`` — actually react to a
+        confirmed exploit instead of the confirmation being recorded only as an event."""
+        if not confirmed_ids:
+            return
+        confirmed = set(confirmed_ids)
+        for index, finding in enumerate(record.findings):
+            if finding.id in confirmed and finding.exploitability != Exploitability.CONFIRMED:
+                record.findings[index] = finding.model_copy(
+                    update={"exploitability": Exploitability.CONFIRMED}
+                )
 
     def _annotate_findings_for_disclosure(self, record: AuditRecord) -> None:
         ai_fallback = any(
@@ -836,9 +1141,20 @@ class AuditService:
     async def _run_static(self, record: AuditRecord, source: NormalizedSource) -> None:
         options = EngineRunOptions(audit_id=str(record.audit_id))
         supported = [adapter for adapter in self._adapters if adapter.supports(source)]
-        results = await asyncio.gather(*(adapter.run(source, options) for adapter in supported))
+        raw_results = await asyncio.gather(
+            *(adapter.run(source, options) for adapter in supported),
+            return_exceptions=True,
+        )
 
-        for result in results:
+        for adapter, raw_result in zip(supported, raw_results):
+            if isinstance(raw_result, Exception):
+                result = EngineRunResult(
+                    engine=adapter.name,
+                    status="failed",
+                    error=f"{raw_result.__class__.__name__}: {raw_result}",
+                )
+            else:
+                result = raw_result
             record.findings.extend(result.findings)
             record.engine_runs.append(
                 EngineRunSummary(
@@ -896,8 +1212,15 @@ class AuditService:
         for finding in findings:
             key = (finding.summary.lower(), finding.taxonomy.wr3_category, finding.severity)
             current = deduped.get(key)
-            if current is None or finding.confidence > current.confidence:
+            if current is None:
                 deduped[key] = finding
+                continue
+            # Same issue reported by multiple engines: keep the higher-confidence
+            # finding but union the engine sources so cross-engine corroboration is
+            # preserved instead of silently discarded.
+            merged_sources = list(dict.fromkeys([*current.sources, *finding.sources]))
+            winner = finding if finding.confidence > current.confidence else current
+            deduped[key] = winner.model_copy(update={"sources": merged_sources})
 
         triaged: list[Finding] = []
         for finding in deduped.values():
@@ -944,7 +1267,7 @@ class AuditService:
             is_owner=is_owner,
             is_public_view=is_public_view,
             can_view_private_findings=is_owner,
-            can_view_raw_outputs=is_owner and record.request.tier in {"team", "pro"},
+            can_view_raw_outputs=is_owner,
             auth_provider=access.actor.provider if access and access.actor.provider else None,
         )
 

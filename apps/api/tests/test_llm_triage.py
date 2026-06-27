@@ -1,3 +1,6 @@
+import json
+
+import httpx
 import pytest
 
 from wr3_api.core.config import get_settings
@@ -5,6 +8,33 @@ from wr3_api.domain.enums import Chain, Exploitability
 from wr3_api.domain.schemas import AuditRecord, CreateAuditRequest, Finding
 from wr3_api.services.audit_service import AuditService
 from wr3_api.services.llm_triage import LlmTriageRouter
+
+
+def _sample_record() -> AuditRecord:
+    audit = AuditRecord(
+        request=CreateAuditRequest(
+            chain=Chain.BASE,
+            address="0x0000000000000000000000000000000000000000",
+            source="contract Vault { function auth(address a) public { require(tx.origin == a); } }",
+        )
+    )
+    audit.findings = [
+        Finding(
+            audit_id=str(audit.audit_id),
+            chain=Chain.BASE,
+            contract={"address": audit.request.address, "name": "Vault", "file": "Vault.sol"},
+            taxonomy={"wr3_category": "access_control"},
+            severity="medium",
+            confidence=0.7,
+            exploitability="likely",
+            sources=["fixture"],
+            summary="tx.origin authorization",
+            description="tx.origin authorization",
+            impact="Authorization can be bypassed by phishing call paths.",
+            recommendation="Use msg.sender and explicit roles.",
+        )
+    ]
+    return audit
 
 
 @pytest.mark.asyncio
@@ -65,9 +95,9 @@ def test_openrouter_route_enables_only_with_key_and_zdr(monkeypatch):
     get_settings.cache_clear()
 
 
-def test_navy_route_enables_claude_opus_with_key(monkeypatch):
+def test_navy_route_enables_gpt_55_with_key(monkeypatch):
     monkeypatch.setenv("WR3_LLM_PROVIDER", "navy")
-    monkeypatch.setenv("WR3_LLM_MODEL", "claude-opus-4.7")
+    monkeypatch.setenv("WR3_LLM_MODEL", "gpt-5.5")
     monkeypatch.setenv("WR3_NAVY_API_KEY", "test-key")
     get_settings.cache_clear()
     router = LlmTriageRouter()
@@ -83,9 +113,79 @@ def test_navy_route_enables_claude_opus_with_key(monkeypatch):
 
     assert route.enabled is True
     assert route.provider == "navy"
-    assert route.model == "claude-opus-4.7"
+    assert route.model == "gpt-5.5"
     assert "navy_route_requested" in route.limitations
     assert "navy_zdr_not_confirmed_using_configured_provider" in route.limitations
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_navy_chat_completions_uses_gpt_55_json_mode_and_auth(monkeypatch):
+    monkeypatch.setenv("WR3_LLM_PROVIDER", "navy")
+    monkeypatch.setenv("WR3_LLM_MODEL", "gpt-5.5")
+    monkeypatch.setenv("WR3_NAVY_API_KEY", "test-key")
+    monkeypatch.setenv("WR3_NAVY_BASE_URL", "https://api.navy/v1")
+    get_settings.cache_clear()
+    seen_requests: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode())
+        seen_requests.append(body)
+        assert request.url.path == "/v1/chat/completions"
+        assert request.headers["authorization"].startswith("Bearer ")
+        assert body["model"] == "gpt-5.5"
+        assert body["response_format"] == {"type": "json_object"}
+        assert "temperature" not in body
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "{\"findings\": []}"}}]},
+            request=request,
+        )
+
+    router = LlmTriageRouter(transport=httpx.MockTransport(handler))
+    record = _sample_record()
+    route = router.route(record)
+
+    result = await router.triage(
+        record,
+        record.request.source or "",
+        fallback=lambda findings: findings,
+        route=route,
+    )
+
+    assert result.provider_invoked is True
+    assert result.error_type is None
+    assert len(seen_requests) == len(router.agent_roles)
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_navy_failure_falls_back_to_deterministic_triage(monkeypatch):
+    monkeypatch.setenv("WR3_LLM_PROVIDER", "navy")
+    monkeypatch.setenv("WR3_LLM_MODEL", "gpt-5.5")
+    monkeypatch.setenv("WR3_NAVY_API_KEY", "test-key")
+    monkeypatch.setenv("WR3_NAVY_BASE_URL", "https://api.navy/v1")
+    get_settings.cache_clear()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "provider temporarily unavailable"}, request=request)
+
+    router = LlmTriageRouter(transport=httpx.MockTransport(handler))
+    record = _sample_record()
+    route = router.route(record)
+
+    result = await router.triage(
+        record,
+        record.request.source or "",
+        fallback=lambda findings: findings,
+        route=route,
+    )
+
+    assert result.provider_invoked is True
+    assert result.error_type == "HTTPStatusError:500"
+    assert result.findings == record.findings
+    assert "llm_triage_provider_http_500_using_deterministic_fallback" in result.limitations
+    assert "llm_triage_provider_error_using_deterministic_fallback" in result.limitations
     get_settings.cache_clear()
 
 

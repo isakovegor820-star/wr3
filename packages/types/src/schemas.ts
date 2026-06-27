@@ -221,7 +221,7 @@ export const auditSummarySchema = z.object({
     zdr_required: true,
     prompt_wrapped_untrusted_source: false,
     explanation: "Пока findings создают статические инструменты и локальные эвристики.",
-    recommendation: "Для глубокого режима подключи платную ZDR/local модель в WR3_LLM_MODEL."
+    recommendation: "Для глубокого режима подключи защищённую ZDR/local модель в WR3_LLM_MODEL."
   }),
   source_metadata: sourceMetadataSchema.default({
     source_hash: null,

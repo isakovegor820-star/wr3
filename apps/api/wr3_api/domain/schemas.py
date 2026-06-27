@@ -208,6 +208,16 @@ class ScoutRunAllRequest(BaseModel):
     tier: Tier = Tier.TEAM
 
 
+class ScoutAutopilotRunRequest(BaseModel):
+    per_chain_limit: int = Field(default=3, ge=1, le=10)
+    min_tvl_usd: float = Field(default=1_000_000, ge=0)
+    chains: list[Chain] = Field(default_factory=list)
+    requested_depth: RequestedDepth = RequestedDepth.DEEP
+    tier: Tier = Tier.TEAM
+    dedupe_window_hours: int = Field(default=24, ge=1, le=24 * 30)
+    process_queued: bool = True
+
+
 class ScoutQueuedAudit(BaseModel):
     audit_id: UUID
     owner_access_token: str
@@ -226,6 +236,23 @@ class ScoutRunResult(BaseModel):
     skipped_count: int
     targets: list[ScoutTarget]
     audits: list[ScoutQueuedAudit]
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ScoutAutopilotStatus(BaseModel):
+    enabled: bool = False
+    running: bool = False
+    interval_seconds: int
+    per_chain_limit: int
+    min_tvl_usd: float
+    dedupe_window_hours: int
+    process_queued: bool = True
+    cycle_count: int = 0
+    queued_total: int = 0
+    last_run_at: datetime | None = None
+    next_run_at: datetime | None = None
+    last_error: str | None = None
+    last_result: ScoutRunResult | None = None
     limitations: list[str] = Field(default_factory=list)
 
 
@@ -284,8 +311,8 @@ class SecurityAgentSummary(BaseModel):
         "ИИ-агент должен только триажить и снижать false positives."
     )
     recommendation: str = (
-        "Для глубокого режима подключи платную ZDR/local модель в WR3_LLM_MODEL. "
-        "Free-модели могут упираться в rate-limit и уходить в fallback."
+        "Для глубокого режима подключи защищённую ZDR/local модель в WR3_LLM_MODEL. "
+        "Внешние модели могут упираться в rate-limit и уходить в fallback."
     )
 
 
@@ -408,10 +435,10 @@ class AuditRecord(BaseModel):
         elif fallback == "deterministic" or error_type:
             status = "fallback"
             status_label = "ИИ-агент не подтвердил"
-            if provider == "navy" and model == "claude-opus-4.7" and error_text == "HTTPStatusError:403":
+            if provider == "navy" and error_text == "HTTPStatusError:403":
                 explanation = (
-                    "wr3 выбрал Claude Opus 4.7 через NavyAI, но Navy вернул отказ доступа. "
-                    "Эта модель требует paid/Max доступ в аккаунте NavyAI, поэтому ИИ-проверка не была выполнена."
+                    f"wr3 выбрал {model} через NavyAI, но Navy вернул отказ доступа. "
+                    "У этого аккаунта нет доступа к выбранной модели, поэтому ИИ-проверка не была выполнена."
                 )
             elif error_text == "HTTPStatusError:429":
                 explanation = (
@@ -467,6 +494,53 @@ class DisclosureCaseRequest(BaseModel):
     scope_note: str
 
 
+class DisclosurePacketRequest(BaseModel):
+    audit_id: UUID
+    finding_id: str | None = None
+    project_name: str | None = None
+    official_contact: str
+    contact_source: str
+    scope_note: str | None = None
+
+
+class DisclosurePacketActionRequest(BaseModel):
+    note: str | None = None
+
+
+class DisclosureManualSentRequest(BaseModel):
+    channel: str = "manual_email"
+    note: str | None = None
+
+
+class DisclosurePacketResponse(BaseModel):
+    case_id: str
+    audit_id: UUID | None = None
+    finding_id: str
+    readiness_state: str
+    candidate_detected: bool
+    confirmed_by_poc: bool
+    pdfs_generated: bool
+    needs_human_approval: bool
+    approved_to_contact: bool
+    manually_sent: bool
+    dismissed: bool
+    project_name: str | None = None
+    chain: Chain | None = None
+    address: str | None = None
+    bug_type: str | None = None
+    severity: Severity | None = None
+    location_label: str | None = None
+    confidence_reason: str | None = None
+    bounty_acceptance_reason: str | None = None
+    official_contact: str | None = None
+    contact_source: str | None = None
+    web_url: str | None = None
+    internal_pdf_url: str | None = None
+    external_pdf_url: str | None = None
+    draft_message: str | None = None
+    limitations: list[str] = Field(default_factory=list)
+
+
 class FindingReviewRequest(BaseModel):
     status: HumanReviewStatus
     note: str | None = None
@@ -493,6 +567,26 @@ class DisclosureCase(BaseModel):
     id: str = Field(default_factory=lambda: f"wr3-disclosure-{uuid4()}")
     finding_id: str
     status: str = "private_contact_pending"
+    audit_id: UUID | None = None
+    project_name: str | None = None
+    project_contact: str | None = None
+    contact_source: str | None = None
+    scope_note: str | None = None
+    readiness_state: str = "candidate_detected"
+    candidate_detected: bool = True
+    confirmed_by_poc: bool = False
+    pdfs_generated: bool = False
+    needs_human_approval: bool = False
+    approved_to_contact: bool = False
+    manually_sent: bool = False
+    dismissed: bool = False
+    internal_report_markdown: str | None = None
+    external_report_markdown: str | None = None
+    draft_message: str | None = None
+    web_url: str | None = None
+    internal_pdf_url: str | None = None
+    external_pdf_url: str | None = None
+    limitations: list[str] = Field(default_factory=list)
     contact_log: list[str] = Field(default_factory=list)
     deadline_next: datetime = Field(default_factory=lambda: utc_now() + timedelta(days=7))
     created_at: datetime = Field(default_factory=utc_now)
@@ -571,91 +665,6 @@ class AuthSessionResponse(BaseModel):
     bearer_token: str
     expires_at: datetime
     limitations: list[str] = Field(default_factory=list)
-
-
-class BillingPlan(BaseModel):
-    tier: Tier
-    name: str
-    price_usd_month: int
-    scan_quota: str
-    retention_days: int
-    poc_access: bool
-    notes: list[str] = Field(default_factory=list)
-
-
-class OneShotAuditPackage(BaseModel):
-    id: str
-    name: str
-    price_usd_min: int
-    price_usd_max: int
-    sla_hours_min: int
-    sla_hours_max: int
-    includes: list[str]
-    limitations: list[str] = Field(default_factory=list)
-
-
-class ManualPaymentIntentRequest(BaseModel):
-    tier: Tier
-
-
-class CheckoutIntentRequest(BaseModel):
-    tier: Tier
-    provider: str = "polar"
-
-    @field_validator("provider")
-    @classmethod
-    def validate_provider(cls, value: str) -> str:
-        allowed = {"polar", "request_finance"}
-        if value not in allowed:
-            raise ValueError(f"provider must be one of {sorted(allowed)}")
-        return value
-
-
-class CheckoutIntent(BaseModel):
-    id: str = Field(default_factory=lambda: f"wr3-checkout-{uuid4()}")
-    user_id: str
-    tier: Tier
-    amount_usd: int
-    provider: str
-    checkout_url: str | None = None
-    status: str = "requires_provider_configuration"
-    created_at: datetime = Field(default_factory=utc_now)
-    expires_at: datetime = Field(default_factory=lambda: utc_now() + timedelta(hours=24))
-    limitations: list[str] = Field(default_factory=list)
-
-
-class ManualPaymentIntent(BaseModel):
-    id: str = Field(default_factory=lambda: f"wr3-pay-{uuid4()}")
-    user_id: str
-    tier: Tier
-    amount_usd: int
-    provider: str = "manual_usdc"
-    accepted_networks: list[str] = Field(default_factory=lambda: ["base", "arbitrum"])
-    payment_address: str
-    memo: str
-    status: str = "pending_manual_review"
-    created_at: datetime = Field(default_factory=utc_now)
-    expires_at: datetime = Field(default_factory=lambda: utc_now() + timedelta(hours=24))
-    limitations: list[str] = Field(default_factory=list)
-
-
-class ConfirmSubscriptionRequest(BaseModel):
-    user_id: str
-    tier: Tier
-    provider: str = "manual_usdc"
-    tx_reference: str
-
-
-class SubscriptionRecord(BaseModel):
-    id: str = Field(default_factory=lambda: f"wr3-sub-{uuid4()}")
-    user_id: str
-    tier: Tier
-    provider: str
-    status: str = "active"
-    tx_reference: str | None = None
-    quota_used: int = 0
-    current_period_end: datetime = Field(default_factory=lambda: utc_now() + timedelta(days=30))
-    created_at: datetime = Field(default_factory=utc_now)
 
 
 class WatchlistRequest(BaseModel):

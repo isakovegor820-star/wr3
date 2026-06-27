@@ -49,7 +49,7 @@ artifact encryption status, and LLM provider.
 `GET /v1/integrations/status`
 
 Returns sanitized free/API-provider posture for audit ingestion, RPC, Telegram,
-LLM, RAG, billing, monitoring, Solana, and roadmap providers. This endpoint
+LLM, RAG, monitoring, Solana, and roadmap providers. This endpoint
 lists env var names and public fallback status, but never returns token values.
 
 `GET /v1/news/hacks?limit=25`
@@ -146,44 +146,6 @@ Returns public-safe project data. High/Critical findings and PoC artifacts are
 redacted unless human-approved disclosure rules allow publication.
 The web app exposes this at `/p/<chain>/<address>`.
 
-## Billing
-
-`GET /v1/billing/plans`
-
-Returns Free/Hobby/Team/Pro plan metadata used by the MVP tier policy.
-
-`GET /v1/billing/one-shot-packages`
-
-Returns one-shot package metadata for quickcheck, PoC report, and deep
-AI-assisted audit offerings.
-
-`POST /v1/billing/manual-usdc-intents`
-
-```json
-{
-  "tier": "team"
-}
-```
-
-Requires an authenticated user and returns a manual USDC payment intent on
-Base/Arbitrum. The intent stays `pending_manual_review`.
-
-`POST /v1/billing/checkout-intents`
-
-Creates a Polar or Request Finance checkout intent. Provider URLs are only
-returned when `WR3_POLAR_CHECKOUT_BASE_URL` or
-`WR3_REQUEST_FINANCE_INVOICE_BASE_URL` is configured; otherwise the response is
-safe `requires_provider_configuration` metadata.
-
-`GET /v1/billing/subscription`
-
-Returns the current authenticated user's active subscription, or `free`/`none`.
-
-`POST /v1/billing/subscriptions/confirm-manual`
-
-Reviewer-only endpoint for confirming a manual payment by transaction reference
-and activating a subscription stub.
-
 ## Telegram
 
 `POST /v1/telegram/webhook`
@@ -193,18 +155,17 @@ preliminary audit under a Telegram-derived user id and returns a reply payload
 with a web status URL. If `WR3_TELEGRAM_WEBHOOK_SECRET` is configured, callers
 must pass Telegram's `X-Telegram-Bot-Api-Secret-Token` header.
 
-Real Telegram API delivery and TON Connect payments are paid-launch
-integrations; this endpoint is the server-side command parser and audit enqueue
-boundary. The web app also exposes `/tg` as a mobile-first scan surface for Mini
-App embedding.
+Real Telegram API delivery is separate from the local command parser and audit
+enqueue boundary. The web app also exposes `/tg` as a mobile-first scan surface
+for Mini App embedding.
 
 ## Watchlist And Webhooks
 
 `POST /v1/watchlist`
 
 Adds an authenticated user's contract watchlist entry. The local MVP returns an
-active stub with `monitoring_worker_not_enabled_in_local_mvp`; paid tier
-enforcement and on-chain workers are pending.
+active stub with `monitoring_worker_not_enabled_in_local_mvp`; on-chain workers
+are pending.
 
 `POST /v1/webhooks/test`
 

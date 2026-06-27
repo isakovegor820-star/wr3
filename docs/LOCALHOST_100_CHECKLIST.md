@@ -19,7 +19,7 @@ this localhost pass. `blocked` means not applicable without production accounts.
 - Trident Cargo install: done.
 - Solana test-validator Homebrew install: done.
 - Baseline test suite: done.
-- Production accounts/domains/payments: intentionally deferred.
+- Production accounts/domains: intentionally deferred.
 
 ## Localhost-First Stages
 
@@ -32,9 +32,9 @@ this localhost pass. `blocked` means not applicable without production accounts.
 | 4 | Benchmark local | done | `npm run benchmark:local`, DeFiHackLabs/SmartBugs/sealevel samples | Expand sample size later |
 | 5 | Dashboard | done | `/dashboard`, `GET /v1/audits`, filters, retry/delete | UX polish as data grows |
 | 6 | Telegram emulator + Mini App | done | `/telegram-emulator`, `/tg`, `/scan`, `/watch`, `/score`, initData bridge | Real BotFather token + HTTPS later |
-| 7 | Billing mock | done | `/billing`, local tier selector, server-side quota path | Real payment providers later |
-| 8 | Disclosure UI | done | `/disclosure`, cases, contact log, timeline/status | External legal review before paid launch |
-| 9 | UX QA | done | `npm run qa:visual` checks `/`, `/tg`, `/dashboard`, `/disclosure`; `npm run site:smoke` checks real click flows for token check, Bug Bounty, Mini App, dashboard, tools, integrations, disclosure, billing, emulator | Broader browser matrix later |
+| 7 | Unrestricted local mode | done | No `/billing` route, no local tier selector, quota path always allows requested depth | Keep feature gates tied to safety, not plans |
+| 8 | Disclosure UI | done | `/disclosure`, cases, contact log, timeline/status | External legal review before public launch |
+| 9 | UX QA | done | `npm run qa:visual` checks `/`, `/tg`, `/dashboard`, `/disclosure`; `npm run site:smoke` checks real click flows for token check, Bug Bounty, Mini App, dashboard, tools, integrations, disclosure, emulator | Broader browser matrix later |
 | 10 | Local readiness 100 | done | `npm run local:readiness` reports 30 passed, 0 failed, 1 skipped optional | Optional pgvector install |
 | 11 | Docs final pass | done | Local guides in `docs/` | Keep in sync with code |
 
@@ -58,6 +58,6 @@ and get a working browser flow for:
 3. View report/findings/score/raw-output gate.
 4. See tool availability.
 5. Exercise Telegram emulator.
-6. Exercise billing tier mock.
+6. Exercise disclosure and local audit retry flows.
 7. Exercise disclosure workflow.
 8. See PoC/fuzzing skipped or artifact status without mainnet actions.
