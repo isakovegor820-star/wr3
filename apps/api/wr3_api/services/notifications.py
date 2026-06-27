@@ -30,6 +30,29 @@ class NotificationService:
         self._watchlist: dict[str, WatchlistEntry] = {}
         self._sender = sender or self._send_http_webhook
 
+    async def send_owner_alert(self, *, title: str, body: str) -> dict[str, object]:
+        """Send a Telegram alert to the configured reviewer(s) — the platform owner,
+        never the audited protocol. Gracefully no-ops when not configured."""
+        settings = get_settings()
+        token = settings.telegram_bot_token
+        chat_ids = settings.telegram_reviewer_user_ids
+        if not token or not chat_ids:
+            return {"sent": 0, "reason": "telegram_owner_alert_not_configured"}
+        text = f"{title}\n\n{body}"[:4000]
+        sent = 0
+        async with httpx.AsyncClient(timeout=settings.webhook_timeout_seconds) as client:
+            for chat_id in chat_ids:
+                try:
+                    response = await client.post(
+                        f"https://api.telegram.org/bot{token}/sendMessage",
+                        json={"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
+                    )
+                    if response.status_code == 200:
+                        sent += 1
+                except Exception:
+                    continue
+        return {"sent": sent, "recipients": len(chat_ids)}
+
     def add_watchlist_entry(self, request: WatchlistRequest, actor: AuthContext) -> WatchlistEntry:
         if not actor.is_authenticated or actor.user_id is None:
             raise NotificationAccessDenied("authenticated_user_required_for_watchlist")

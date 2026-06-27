@@ -16,6 +16,7 @@ from wr3_api.domain.schemas import (
 )
 from wr3_api.services.audit_service import AuditService
 from wr3_api.services.auth import AuthContext
+from wr3_api.services.dispatcher import dispatch_audit_processing_detached
 from wr3_api.services.target_discovery import TargetDiscoveryService
 
 
@@ -222,6 +223,12 @@ class ScoutAutopilot:
         return audits, skipped_limitations
 
     def _schedule_processing(self, audit_id) -> None:
-        task = asyncio.create_task(self._audit_service.process_audit(audit_id))
-        self._processing_tasks.add(task)
-        task.add_done_callback(self._processing_tasks.discard)
+        # Route through the dispatcher: Celery (durable, survives an API restart)
+        # when WR3_TASK_BACKEND=celery, otherwise an in-process asyncio task.
+        _limitations, task = dispatch_audit_processing_detached(
+            audit_id=audit_id,
+            local_processor=self._audit_service.process_audit,
+        )
+        if task is not None:
+            self._processing_tasks.add(task)
+            task.add_done_callback(self._processing_tasks.discard)

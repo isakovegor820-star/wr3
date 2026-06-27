@@ -42,6 +42,7 @@ from wr3_api.services.contracts import build_source_metadata
 from wr3_api.services.explorers import ExplorerSourcePuller, default_explorer_pullers
 from wr3_api.services.fuzzing import FuzzingWorker
 from wr3_api.services.llm_triage import LlmTriageRouter
+from wr3_api.services.notifications import NotificationService
 from wr3_api.services.poc import FoundryPocWorker, high_risk_poc_candidates
 from wr3_api.services.quota import InMemoryQuotaLimiter
 from wr3_api.services.repository import (
@@ -108,6 +109,7 @@ class AuditService:
         self._triage_consensus = TriageConsensus()
         self._safe_harbor = safe_harbor_registry or SafeHarborRegistry()
         self._artifact_vault = ArtifactVault()
+        self._notifications = NotificationService()
 
     async def create_audit(self, request: CreateAuditRequest, actor: AuthContext | None = None) -> AuditRecord:
         record = AuditRecord(request=request, user_id=actor.user_id if actor else None)
@@ -895,6 +897,7 @@ class AuditService:
             record.limitations.append("high_risk_findings_require_human_review_before_public_claim")
         self._transition(record, AuditState.COMPLETED, reason="report_ready")
         self._audit_repository.save(record)
+        await self._maybe_alert_owner(record)
 
     def _apply_poc_confirmation(self, record: AuditRecord, confirmed_ids: tuple[str, ...]) -> None:
         """Write PoC confirmation back onto findings so disclosure-readiness and
@@ -908,6 +911,31 @@ class AuditService:
                 record.findings[index] = finding.model_copy(
                     update={"exploitability": Exploitability.CONFIRMED}
                 )
+
+    async def _maybe_alert_owner(self, record: AuditRecord) -> None:
+        """Alert the platform owner (reviewer Telegram) when an autonomous/monitoring
+        audit surfaces high/critical findings, so they don't have to poll. Never
+        contacts the audited protocol — disclosure stays manual."""
+        if record.request.user_intent != UserIntent.MONITORING:
+            return
+        high = [
+            finding
+            for finding in record.findings
+            if finding.severity in {Severity.CRITICAL, Severity.HIGH}
+        ]
+        if not high:
+            return
+        top = high[0]
+        title = f"wr3 alert: {len(high)} high/critical on {record.request.chain}"
+        body = (
+            f"{record.request.address or 'source scan'}\n"
+            f"Top: [{top.severity}] {top.summary}\n"
+            f"Audit: {record.audit_id}"
+        )
+        try:
+            await self._notifications.send_owner_alert(title=title, body=body)
+        except Exception:
+            record.limitations.append("owner_alert_delivery_failed")
 
     def _annotate_findings_for_disclosure(self, record: AuditRecord) -> None:
         ai_fallback = any(
