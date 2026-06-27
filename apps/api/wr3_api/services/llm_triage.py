@@ -10,7 +10,65 @@ import httpx
 from wr3_api.core.config import get_settings
 from wr3_api.domain.enums import Exploitability, HumanReviewStatus, Severity
 from wr3_api.domain.safety import build_untrusted_source_block
-from wr3_api.domain.schemas import AuditRecord, Finding
+from wr3_api.domain.schemas import AuditRecord, Finding, utc_now
+
+
+_PROVIDER_MAX_CONCURRENCY = 3
+_provider_gate: tuple[object, asyncio.Semaphore] | None = None
+
+
+def _get_provider_semaphore() -> asyncio.Semaphore:
+    """Cap concurrent provider calls. Bursty workloads (the scout autopilot fans
+    out many audits x4 agents at once) otherwise trip provider rate limits (429)
+    and silently fall back to deterministic triage. Re-created per event loop so
+    unit tests with their own loops do not share a stale semaphore."""
+    global _provider_gate
+    loop = asyncio.get_running_loop()
+    if _provider_gate is None or _provider_gate[0] is not loop:
+        _provider_gate = (loop, asyncio.Semaphore(_PROVIDER_MAX_CONCURRENCY))
+    return _provider_gate[1]
+
+
+# --- Daily LLM call budget + kill switch (cost control for autonomous runs) ---
+_llm_calls_today = 0
+_llm_calls_date: str | None = None
+
+
+def _today() -> str:
+    return utc_now().date().isoformat()
+
+
+def _llm_budget_used() -> int:
+    return _llm_calls_today if _llm_calls_date == _today() else 0
+
+
+def _llm_budget_exhausted() -> bool:
+    cap = get_settings().llm_max_calls_per_day
+    return bool(cap) and _llm_budget_used() >= cap
+
+
+def _llm_budget_consume() -> bool:
+    """Count one provider call against the daily cap. Returns False when the cap is
+    already reached, so the caller falls back to deterministic triage."""
+    global _llm_calls_today, _llm_calls_date
+    today = _today()
+    if _llm_calls_date != today:
+        _llm_calls_date = today
+        _llm_calls_today = 0
+    cap = get_settings().llm_max_calls_per_day
+    if cap and _llm_calls_today >= cap:
+        return False
+    _llm_calls_today += 1
+    return True
+
+
+def llm_budget_status() -> dict[str, object]:
+    settings = get_settings()
+    return {
+        "used_today": _llm_budget_used(),
+        "cap_per_day": settings.llm_max_calls_per_day,
+        "kill_switch": settings.llm_kill_switch,
+    }
 
 
 @dataclass(frozen=True)
@@ -40,11 +98,32 @@ class LlmTriageRouter:
         "cross_contract_analyzer",
     )
 
+    def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
+        self._transport = transport
+
     def route(self, record: AuditRecord) -> LlmTriageRoute:
         settings = get_settings()
         limitations: list[str] = []
         if settings.llm_zdr_required:
             limitations.append("zdr_required_for_security_triage")
+        if settings.llm_kill_switch:
+            limitations.append("llm_kill_switch_enabled_using_deterministic_fallback")
+            return LlmTriageRoute(
+                provider=settings.llm_provider,
+                model=settings.llm_model,
+                enabled=False,
+                zdr_required=settings.llm_zdr_required,
+                limitations=limitations,
+            )
+        if _llm_budget_exhausted():
+            limitations.append("llm_daily_budget_exhausted_using_deterministic_fallback")
+            return LlmTriageRoute(
+                provider=settings.llm_provider,
+                model=settings.llm_model,
+                enabled=False,
+                zdr_required=settings.llm_zdr_required,
+                limitations=limitations,
+            )
         if settings.llm_provider == "disabled":
             limitations.append("llm_triage_disabled_using_deterministic_fallback")
             return LlmTriageRoute(
@@ -214,6 +293,8 @@ class LlmTriageRouter:
 
     async def _call_provider(self, route: LlmTriageRoute, prompt: str, *, agent: str) -> dict[str, object]:
         settings = get_settings()
+        if not _llm_budget_consume():
+            raise RuntimeError("llm_daily_budget_exhausted")
         provider = route.provider.lower()
         if provider == "openrouter":
             if not settings.openrouter_api_key:
@@ -250,21 +331,43 @@ class LlmTriageRouter:
                 },
                 {"role": "user", "content": prompt},
             ],
-            "temperature": 0,
-            "max_tokens": 1200,
+            "max_tokens": settings.llm_max_tokens,
         }
+        if provider == "navy":
+            request_body["response_format"] = {"type": "json_object"}
+        else:
+            request_body["temperature"] = 0
         if provider_payload is not None:
             request_body["provider"] = provider_payload
-        async with httpx.AsyncClient(timeout=settings.llm_timeout_seconds) as client:
-            response = await client.post(
-                url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    **extra_headers,
-                },
-                json=request_body,
-            )
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            **extra_headers,
+        }
+        # Providers (Navy/OpenRouter) intermittently return 403/429/5xx or time out
+        # under load. Without a bounded retry each transient failure silently
+        # downgrades triage to the deterministic fallback. 400 is left non-retryable
+        # because it indicates a bad request, not a transient condition.
+        retryable_status = {403, 408, 425, 429, 500, 502, 503, 504}
+        max_attempts = 3
+        async with _get_provider_semaphore(), httpx.AsyncClient(
+            timeout=settings.llm_timeout_seconds, transport=self._transport
+        ) as client:
+            response: httpx.Response | None = None
+            for attempt in range(max_attempts):
+                try:
+                    response = await client.post(url, headers=headers, json=request_body)
+                except httpx.TransportError:
+                    if attempt + 1 >= max_attempts:
+                        raise
+                    await asyncio.sleep(0.4 * (2**attempt))
+                    continue
+                if response.status_code in retryable_status and attempt + 1 < max_attempts:
+                    await asyncio.sleep(0.4 * (2**attempt))
+                    continue
+                break
+            if response is None:  # pragma: no cover - defensive
+                raise RuntimeError("llm_triage_no_response")
             response.raise_for_status()
         data = response.json()
         content = data["choices"][0]["message"]["content"]

@@ -5,7 +5,6 @@ import time
 from dataclasses import dataclass
 
 from wr3_api.core.config import get_settings
-from wr3_api.domain.enums import Tier
 from wr3_api.domain.schemas import AuditEvent, AuditRecord, EngineRunSummary, Finding
 from wr3_api.services.artifacts import ArtifactEncryptionRequired, ArtifactVault
 from wr3_api.services.sandbox import SandboxPolicy
@@ -41,9 +40,6 @@ class FuzzingWorker:
 
     async def run(self, record: AuditRecord, findings: list[Finding]) -> FuzzWorkerResult:
         started = time.perf_counter()
-        if record.request.tier not in {Tier.TEAM, Tier.PRO}:
-            return self._skipped(started, findings, "fuzzing_requires_team_or_pro_tier")
-
         for engine, argv in self._commands.items():
             decision = self._sandbox_policy.validate_argv(argv)
             if not decision.allowed:

@@ -1,15 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AuditSummary, Finding } from "@wr3/shared";
-import { LockKeyhole } from "lucide-react";
-import { tCap } from "@/lib/i18n";
+import { AlertTriangle, CheckCircle2, LockKeyhole } from "lucide-react";
+import { getRawOutputsMetadata, type RawOutputsMetadata } from "@/lib/api";
+import { tCap, tStatus } from "@/lib/i18n";
 import { FindingsList } from "./FindingsList";
 
 type Tab = "findings" | "score" | "raw";
 
-export function ReportTabs({ audit, findings }: { audit: AuditSummary; findings: Finding[] }) {
+export function ReportTabs({ audit, findings, ownerToken }: { audit: AuditSummary; findings: Finding[]; ownerToken?: string }) {
   const [tab, setTab] = useState<Tab>("findings");
+  const [rawOutputs, setRawOutputs] = useState<RawOutputsMetadata | null>(null);
+  const [rawLoading, setRawLoading] = useState(false);
+  const [rawError, setRawError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tab !== "raw" || !audit.access.can_view_raw_outputs || rawOutputs || audit.audit_id === "demo") {
+      return;
+    }
+    let cancelled = false;
+    setRawLoading(true);
+    setRawError(null);
+    getRawOutputsMetadata(String(audit.audit_id), ownerToken)
+      .then((payload) => {
+        if (!cancelled) {
+          setRawOutputs(payload);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setRawError(error instanceof Error ? error.message : "Не удалось загрузить metadata движков.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRawLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [audit.access.can_view_raw_outputs, audit.audit_id, ownerToken, rawOutputs, tab]);
 
   return (
     <section className="panel">
@@ -94,13 +126,42 @@ export function ReportTabs({ audit, findings }: { audit: AuditSummary; findings:
             <p className="eyebrow">{audit.access.is_owner ? "Владелец подтверждён" : "Доступ закрыт"}</p>
             <h2>
               {audit.access.can_view_raw_outputs
-                ? "Владелец может запросить сырые метаданные."
-                : "Сырые выводы движков требуют платный доступ владельца."}
+                ? "Raw findings: metadata запусков движков"
+                : "Сырые выводы движков доступны только владельцу."}
             </h2>
             <p>
-              В MVP этот блок намеренно показывает только метаданные. Приватный исходный код,
+              Этот блок намеренно показывает только метаданные. Приватный исходный код,
               находки, PoC-трейсы и сырой вывод инструментов должны оставаться зашифрованными и закрытыми для владельца.
             </p>
+            {audit.access.can_view_raw_outputs ? (
+              <div className="raw-engine-list" aria-live="polite">
+                {rawLoading ? <p className="empty-state">Загружаю metadata движков...</p> : null}
+                {rawError ? <p className="error-box">{rawError}</p> : null}
+                {rawOutputs && rawOutputs.engines.length === 0 ? (
+                  <p className="empty-state">Движки ещё не записали raw metadata для этого аудита.</p>
+                ) : null}
+                {rawOutputs?.engines.map((engine) => {
+                  const isHealthy = engine.status === "success";
+                  return (
+                    <article className="raw-engine-row" key={`${engine.engine}-${engine.status}-${engine.duration_ms}`}>
+                      {isHealthy ? (
+                        <CheckCircle2 aria-hidden="true" size={18} />
+                      ) : (
+                        <AlertTriangle aria-hidden="true" size={18} />
+                      )}
+                      <div>
+                        <strong>{engine.engine}</strong>
+                        <span>
+                          {tStatus(engine.status)} · {engine.duration_ms} мс ·{" "}
+                          {engine.artifact_uri ? "приватный артефакт сохранён" : "артефакт не сохранён"}
+                        </span>
+                        {engine.error ? <code>{engine.error}</code> : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

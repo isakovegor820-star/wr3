@@ -9,6 +9,7 @@ import httpx
 
 from wr3_api.core.config import get_settings
 from wr3_api.domain.schemas import (
+    DisclosurePacketResponse,
     WatchlistEntry,
     WatchlistRequest,
     WebhookTestRequest,
@@ -29,6 +30,29 @@ class NotificationService:
         self._watchlist: dict[str, WatchlistEntry] = {}
         self._sender = sender or self._send_http_webhook
 
+    async def send_owner_alert(self, *, title: str, body: str) -> dict[str, object]:
+        """Send a Telegram alert to the configured reviewer(s) — the platform owner,
+        never the audited protocol. Gracefully no-ops when not configured."""
+        settings = get_settings()
+        token = settings.telegram_bot_token
+        chat_ids = settings.telegram_reviewer_user_ids
+        if not token or not chat_ids:
+            return {"sent": 0, "reason": "telegram_owner_alert_not_configured"}
+        text = f"{title}\n\n{body}"[:4000]
+        sent = 0
+        async with httpx.AsyncClient(timeout=settings.webhook_timeout_seconds) as client:
+            for chat_id in chat_ids:
+                try:
+                    response = await client.post(
+                        f"https://api.telegram.org/bot{token}/sendMessage",
+                        json={"chat_id": chat_id, "text": text, "disable_web_page_preview": True},
+                    )
+                    if response.status_code == 200:
+                        sent += 1
+                except Exception:
+                    continue
+        return {"sent": sent, "recipients": len(chat_ids)}
+
     def add_watchlist_entry(self, request: WatchlistRequest, actor: AuthContext) -> WatchlistEntry:
         if not actor.is_authenticated or actor.user_id is None:
             raise NotificationAccessDenied("authenticated_user_required_for_watchlist")
@@ -38,7 +62,7 @@ class NotificationService:
             address=request.address,
             label=request.label,
             alert_channels=request.alert_channels,
-            limitations=["paid_tier_enforcement_pending", "monitoring_worker_not_enabled_in_local_mvp"],
+            limitations=["monitoring_worker_not_enabled_in_local_mvp"],
         )
         self._watchlist[entry.id] = entry
         return entry
@@ -103,6 +127,128 @@ class NotificationService:
         if signature:
             headers["x-wr3-signature-sha256"] = signature
         return headers
+
+    def build_telegram_disclosure_alert(
+        self,
+        packet: DisclosurePacketResponse,
+        *,
+        mode: str = "normal",
+    ) -> dict[str, object] | None:
+        if mode not in {"normal", "ops"}:
+            raise ValueError("unsupported_telegram_alert_mode")
+        almost_ready = (
+            packet.needs_human_approval
+            and packet.confirmed_by_poc
+            and packet.pdfs_generated
+            and bool(packet.official_contact)
+        )
+        approved = packet.approved_to_contact and bool(packet.official_contact)
+        if mode == "normal" and not (almost_ready or approved):
+            return None
+
+        if approved:
+            text = self._approved_to_contact_text(packet)
+            buttons = self._review_buttons(packet)
+            buttons.append([{"text": "Отправил", "callback_data": f"wr3:sent:{packet.case_id}"}])
+            kind = "approved_to_contact"
+        elif almost_ready:
+            text = self._almost_ready_text(packet)
+            buttons = self._review_buttons(packet)
+            buttons.append(
+                [
+                    {"text": "Approve", "callback_data": f"wr3:approve:{packet.case_id}"},
+                    {"text": "Needs Review", "callback_data": f"wr3:needs_review:{packet.case_id}"},
+                    {"text": "Dismiss", "callback_data": f"wr3:dismiss:{packet.case_id}"},
+                ]
+            )
+            kind = "needs_human_approval"
+        else:
+            text = self._ops_context_text(packet)
+            buttons = self._review_buttons(packet)
+            buttons.append(
+                [
+                    {"text": "Needs Review", "callback_data": f"wr3:needs_review:{packet.case_id}"},
+                    {"text": "Dismiss", "callback_data": f"wr3:dismiss:{packet.case_id}"},
+                ]
+            )
+            kind = "ops_context"
+
+        return {
+            "kind": kind,
+            "mode": mode,
+            "case_id": packet.case_id,
+            "text": text,
+            "links": {
+                "web_card": packet.web_url,
+                "internal_pdf": packet.internal_pdf_url,
+                "external_pdf": packet.external_pdf_url,
+            },
+            "reply_markup": {"inline_keyboard": buttons},
+            "contains_private_poc": False,
+            "auto_sends_external_message": False,
+        }
+
+    def build_telegram_ops_alert(self, *, title: str, detail: str, severity: str = "info") -> dict[str, object]:
+        return {
+            "kind": "ops",
+            "severity": severity,
+            "text": f"wr3 ops: {title}\n{detail}",
+            "reply_markup": {"inline_keyboard": []},
+            "auto_sends_external_message": False,
+        }
+
+    def _review_buttons(self, packet: DisclosurePacketResponse) -> list[list[dict[str, str]]]:
+        if packet.web_url:
+            return [[{"text": "Open Review", "url": packet.web_url}]]
+        return [[{"text": "Open Review", "callback_data": f"wr3:open:{packet.case_id}"}]]
+
+    def _almost_ready_text(self, packet: DisclosurePacketResponse) -> str:
+        return "\n".join(
+            [
+                "wr3: почти готово к human review",
+                f"Project: {packet.project_name or 'unknown'}",
+                f"Target: {packet.chain}:{packet.address or 'source-only'}",
+                f"Bug: {packet.bug_type or 'unknown'} / {packet.severity or 'unknown'}",
+                f"Where: {packet.location_label or 'architecture/business logic'}",
+                f"Why confident: {self._compact(packet.confidence_reason)}",
+                f"Why bounty may accept: {self._compact(packet.bounty_acceptance_reason)}",
+                f"Official contact: {packet.official_contact} ({packet.contact_source})",
+                "Telegram omits reproduction recipes and raw private traces.",
+            ]
+        )
+
+    def _ops_context_text(self, packet: DisclosurePacketResponse) -> str:
+        return "\n".join(
+            [
+                "wr3 ops: disclosure case не готов к отправке",
+                f"Readiness: {packet.readiness_state}",
+                f"Project: {packet.project_name or 'unknown'}",
+                f"Target: {packet.chain}:{packet.address or 'source-only'}",
+                f"Contact: {packet.official_contact or 'not confirmed'} ({packet.contact_source or 'unknown'})",
+                f"Limitations: {self._compact('; '.join(packet.limitations), limit=420)}",
+                "Normal Telegram mode will stay quiet until PoC/fork/test, PDFs and official contact are ready.",
+            ]
+        )
+
+    def _approved_to_contact_text(self, packet: DisclosurePacketResponse) -> str:
+        return "\n".join(
+            [
+                "wr3: можно писать вручную",
+                f"Official contact: {packet.official_contact} ({packet.contact_source})",
+                f"External PDF: {packet.external_pdf_url}",
+                "",
+                "Safe draft:",
+                self._compact(packet.draft_message, limit=900),
+                "",
+                "wr3 will only log the manual send. It will not send email/forms automatically.",
+            ]
+        )
+
+    def _compact(self, value: str | None, *, limit: int = 260) -> str:
+        if not value:
+            return "not available"
+        normalized = " ".join(value.split())
+        return normalized if len(normalized) <= limit else f"{normalized[:limit - 1]}…"
 
     async def _send_http_webhook(
         self,

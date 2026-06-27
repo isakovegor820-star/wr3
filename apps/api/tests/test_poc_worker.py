@@ -41,7 +41,7 @@ async def test_standard_team_audit_records_foundry_poc_worker_result():
 
 
 @pytest.mark.asyncio
-async def test_foundry_worker_blocks_free_tier_poc_attempts():
+async def test_foundry_worker_does_not_block_legacy_free_tier():
     worker = FoundryPocWorker()
     record = AuditRecord(
         request=CreateAuditRequest(
@@ -56,7 +56,7 @@ async def test_foundry_worker_blocks_free_tier_poc_attempts():
     result = await worker.run(record, [])
 
     assert result.status == "skipped"
-    assert result.error == "poc_requires_team_or_pro_tier"
+    assert result.error == "poc_no_high_or_critical_candidates"
 
 
 def test_foundry_poc_generation_wraps_source_and_previous_error_safely():

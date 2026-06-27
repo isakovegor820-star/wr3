@@ -25,7 +25,7 @@ import {
   Sparkles,
   Star
 } from "lucide-react";
-import type { Chain, ScoreBreakdown, Tier } from "@wr3/shared";
+import type { Chain, ScoreBreakdown } from "@wr3/shared";
 import { scoreBand } from "@wr3/shared";
 import {
   addWatchlistEntry,
@@ -174,7 +174,6 @@ export function TelegramMiniAppClient() {
   const [consent, setConsent] = useState(false);
   const [tab, setTab] = useState<MiniTab>("scan");
   const [chain, setChain] = useState<Chain>("base");
-  const [tier, setTier] = useState<Tier>("free");
   const [address, setAddress] = useState("0x0000000000000000000000000000000000000000");
   const [bountyScopeConfirmed, setBountyScopeConfirmed] = useState(false);
   const [bountyProgram, setBountyProgram] = useState("training");
@@ -223,10 +222,6 @@ export function TelegramMiniAppClient() {
     if (queryChain && chains.some((item) => item.value === queryChain)) setChain(queryChain);
     if (queryAddress) setAddress(queryAddress);
 
-    const storedTier = window.localStorage.getItem("wr3-local-tier") as Tier | null;
-    if (storedTier && ["free", "hobby", "team", "pro"].includes(storedTier)) {
-      setTier(storedTier);
-    }
   }, []);
 
   useEffect(() => {
@@ -285,7 +280,7 @@ export function TelegramMiniAppClient() {
       mainButton.hideProgress?.();
       mainButton.hide();
     };
-  }, [webApp, tab, isBusy, address, chain, tier, session, bountyScopeConfirmed, bountyProgram]);
+  }, [webApp, tab, isBusy, address, chain, session, bountyScopeConfirmed, bountyProgram]);
 
   async function connectTelegram() {
     setError(null);
@@ -332,10 +327,9 @@ export function TelegramMiniAppClient() {
           address: safeAddress,
           source: "",
           allow_bytecode_only: true,
-          requested_depth: tier === "team" || tier === "pro" ? "standard" : "preliminary",
+          requested_depth: "standard",
           visibility: "private",
-          user_intent: "third_party_research",
-          tier
+          user_intent: "third_party_research"
         },
         session?.bearer_token
       );
@@ -418,8 +412,7 @@ export function TelegramMiniAppClient() {
           allow_bytecode_only: true,
           requested_depth: "preliminary",
           visibility: "private",
-          user_intent: "third_party_research",
-          tier
+          user_intent: "third_party_research"
         },
         session?.bearer_token
       );
@@ -495,7 +488,6 @@ export function TelegramMiniAppClient() {
             onRunScore={runScore}
             scoreResponse={scoreResponse}
             scanResult={scanResult}
-            tier={tier}
           />
         ) : null}
 
@@ -551,8 +543,6 @@ export function TelegramMiniAppClient() {
             isInsideTelegram={isInsideTelegram}
             onConnect={connectTelegram}
             setConsent={setConsent}
-            setTier={setTier}
-            tier={tier}
             userLabel={userLabel}
           />
         ) : null}
@@ -677,7 +667,6 @@ function ScanScreen({
   onRunScore,
   scoreResponse,
   scanResult,
-  tier
 }: {
   address: string;
   addressError: string | null;
@@ -692,7 +681,6 @@ function ScanScreen({
   onRunScore: () => Promise<void>;
   scoreResponse: PublicProjectSummary | null;
   scanResult: ScanResult;
-  tier: Tier;
 }) {
   const score = scoreResponse?.score ?? null;
   return (
@@ -889,8 +877,6 @@ function MoreScreen({
   isInsideTelegram,
   onConnect,
   setConsent,
-  setTier,
-  tier,
   userLabel
 }: {
   consent: boolean;
@@ -900,8 +886,6 @@ function MoreScreen({
   isInsideTelegram: boolean;
   onConnect: () => Promise<void>;
   setConsent: (value: boolean) => void;
-  setTier: (value: Tier) => void;
-  tier: Tier;
   userLabel: string;
 }) {
   return (
@@ -924,23 +908,6 @@ function MoreScreen({
         {isAuthenticating ? <Loader2 className="spin" aria-hidden="true" size={18} /> : <ShieldCheck aria-hidden="true" size={18} />}
         Подключить Telegram
       </button>
-
-      <label className="tg-field">
-        <span>Локальный симулятор тарифа</span>
-        <select
-          value={tier}
-          onChange={(event) => {
-            const nextTier = event.target.value as Tier;
-            setTier(nextTier);
-            window.localStorage.setItem("wr3-local-tier", nextTier);
-          }}
-        >
-          <option value="free">Бесплатный</option>
-          <option value="hobby">Хобби</option>
-          <option value="team">Команда</option>
-          <option value="pro">Про</option>
-        </select>
-      </label>
 
       <div className="tg-link-grid">
         <Link href="/telegram-emulator">Эмулятор</Link>

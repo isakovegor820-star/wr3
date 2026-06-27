@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from wr3_api.domain.schemas import AuditRecord
+from wr3_api.domain.schemas import AuditRecord, DisclosureCase, Finding
 
 DISCLAIMER = (
     "ИИ-предаудит и триаж воспроизводимости. Этот отчёт не заменяет "
@@ -84,7 +84,6 @@ CAP_LABELS = {
 
 LIMITATION_LABELS = {
     "demo_data": "демо-данные",
-    "poc_requires_paid_tier": "PoC доступен только на платном тарифе",
     "anonymous_owner_token_required_for_private_access": "для приватного доступа нужен токен владельца",
     "zdr_required_for_security_triage": "для security-триажа требуется ZDR-маршрут",
     "openrouter_zdr_route_requested": "OpenRouter запрошен в ZDR-режиме",
@@ -102,7 +101,6 @@ LIMITATION_LABELS = {
     "public_claims_require_human_review": "публичные заявления требуют ручного ревью",
     "adversarial_input_detected": "обнаружены признаки prompt-injection",
     "verified_source_pull_failed_upload_source": "не удалось подтянуть verified source, нужен исходный код",
-    "raw_outputs_require_paid_tier_artifact_access": "сырые выводы требуют платный доступ владельца",
 }
 
 
@@ -124,7 +122,7 @@ def _limitation_label(value: str) -> str:
     if value.startswith("llm_triage_provider_http_"):
         status = value.split("http_", 1)[1].split("_", 1)[0]
         if status == "403":
-            return "ИИ-провайдер отказал в доступе к модели, проверь тариф/доступ к Claude Opus 4.7"
+            return "ИИ-провайдер отказал в доступе к модели, проверь доступ к Claude Opus 4.7"
         if status == "429":
             return "ИИ-провайдер вернул лимит запросов, wr3 безопасно перешёл на детерминированный триаж"
         return f"ИИ-провайдер вернул HTTP {status}, wr3 безопасно перешёл на детерминированный триаж"
@@ -133,8 +131,6 @@ def _limitation_label(value: str) -> str:
         return f"{engine} пропущен: {reason}"
     if "_raw_output_artifact_requires_encryption" in value:
         return "для сохранения сырого вывода нужен ключ шифрования артефактов"
-    if "_billing_verification_stub" in value:
-        return "проверка тарифа пока работает в MVP-режиме"
     return value.replace("_", " ")
 
 
@@ -288,3 +284,156 @@ class ReportRenderer:
             elif line:
                 paragraphs.append(f"<p>{line}</p>")
         return "<!doctype html><html><body>" + "\n".join(paragraphs) + "</body></html>"
+
+    def render_internal_disclosure_markdown(
+        self,
+        record: AuditRecord,
+        finding: Finding,
+        case: DisclosureCase,
+    ) -> str:
+        assessment = finding.disclosure_assessment
+        lines = [
+            f"# wr3 internal disclosure packet: {case.project_name or finding.contract.name}",
+            "",
+            "Private reviewer-only report. Keep inside wr3 owner/reviewer access.",
+            "",
+            "## Target",
+            "",
+            f"- Chain: `{record.request.chain}`",
+            f"- Address: `{record.request.address or finding.contract.address or 'source-only'}`",
+            f"- Finding id: `{finding.id}`",
+            f"- Case id: `{case.id}`",
+            "",
+            "## Finding",
+            "",
+            f"- Type: `{finding.taxonomy.wr3_category}`",
+            f"- Severity: `{finding.severity}`",
+            f"- Confidence: `{finding.confidence:.2f}`",
+            f"- Location: `{assessment.location_label}`",
+            f"- Reproducibility: `{finding.exploitability}`",
+            f"- PoC/fork/test status: `{finding.evidence.poc_status}`",
+            f"- PoC artifact: `{finding.evidence.poc_artifact_uri or 'not stored'}`",
+            f"- Fuzzer artifact: `{finding.evidence.fuzzer_counterexample_uri or 'not stored'}`",
+            "",
+            "## Why wr3 is confident",
+            "",
+            assessment.technical_explanation,
+            "",
+            "## Impact and bounty acceptance",
+            "",
+            finding.impact,
+            "",
+            self._bounty_acceptance_reason(record, finding, case),
+            "",
+            "## Trace / evidence",
+            "",
+            finding.evidence.static_trace or "No raw trace stored in this local run.",
+            "",
+            "## Guardrails",
+            "",
+            "- No mainnet transaction was broadcast by wr3.",
+            "- No external support message was sent automatically.",
+            "- External report must not include working transaction steps.",
+            "",
+        ]
+        return "\n".join(lines)
+
+    def render_external_disclosure_markdown(
+        self,
+        record: AuditRecord,
+        finding: Finding,
+        case: DisclosureCase,
+    ) -> str:
+        assessment = finding.disclosure_assessment
+        lines = [
+            f"# Responsible disclosure report: {case.project_name or finding.contract.name}",
+            "",
+            "This is a private responsible disclosure summary prepared for the official security contact.",
+            "",
+            "## Scope",
+            "",
+            f"- Chain: `{record.request.chain}`",
+            f"- Contract / target: `{record.request.address or finding.contract.address or 'source-only'}`",
+            f"- Finding category: `{finding.taxonomy.wr3_category}`",
+            f"- Severity candidate: `{finding.severity}`",
+            f"- Location: `{assessment.location_label}`",
+            "",
+            "## Summary",
+            "",
+            self._safe_external_text(assessment.plain_explanation),
+            "",
+            "## Potential impact",
+            "",
+            self._safe_external_text(finding.impact),
+            "",
+            "## Validation posture",
+            "",
+            "- Validation was passive/local/fork/test only.",
+            "- No mainnet transaction was broadcast.",
+            "- No funds were moved.",
+            "- This first-contact report omits transaction recipe details and raw private traces.",
+            "",
+            "## Requested next step",
+            "",
+            "Please confirm the official security or bounty intake channel for this target. "
+            "After confirmation, the wr3 team can continue coordinated private disclosure.",
+            "",
+        ]
+        return "\n".join(lines)
+
+    def render_text_pdf(self, title: str, body: str) -> bytes:
+        clean_lines = [title, "", *body.splitlines()]
+        text_commands = ["BT", "/F1 10 Tf", "50 780 Td"]
+        for line in clean_lines[:95]:
+            escaped = self._pdf_escape(line[:110])
+            text_commands.append(f"({escaped}) Tj")
+            text_commands.append("0 -12 Td")
+        text_commands.append("ET")
+        stream = "\n".join(text_commands).encode("latin-1", "replace")
+        objects = [
+            b"<< /Type /Catalog /Pages 2 0 R >>",
+            b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+            b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream",
+        ]
+        out = bytearray(b"%PDF-1.4\n")
+        offsets = [0]
+        for index, obj in enumerate(objects, start=1):
+            offsets.append(len(out))
+            out.extend(f"{index} 0 obj\n".encode("ascii"))
+            out.extend(obj)
+            out.extend(b"\nendobj\n")
+        xref_offset = len(out)
+        out.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+        out.extend(b"0000000000 65535 f \n")
+        for offset in offsets[1:]:
+            out.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+        out.extend(
+            f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("ascii")
+        )
+        return bytes(out)
+
+    def _pdf_escape(self, value: str) -> str:
+        return value.encode("latin-1", "replace").decode("latin-1").replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+    def _safe_external_text(self, value: str) -> str:
+        replacements = {
+            "scam": "unsafe",
+            "fraud": "unsafe",
+            "exploit steps": "transaction recipe details",
+            "working PoC": "validation evidence",
+            "working poc": "validation evidence",
+        }
+        safe = value
+        for needle, replacement in replacements.items():
+            safe = safe.replace(needle, replacement).replace(needle.title(), replacement)
+        return safe
+
+    def _bounty_acceptance_reason(self, record: AuditRecord, finding: Finding, case: DisclosureCase) -> str:
+        contact = case.project_contact or "official contact pending"
+        return (
+            f"Potentially acceptable because impact is documented, severity is {finding.severity}, "
+            f"validation status is {finding.evidence.poc_status}, scope/contact evidence is `{case.contact_source or 'unknown'}` "
+            f"via `{contact}`, and the report stays private until human approval."
+        )

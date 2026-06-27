@@ -1,6 +1,9 @@
+from uuid import UUID
+
 from fastapi.testclient import TestClient
 
-from wr3_api.domain.enums import Chain
+from wr3_api.api.routes.audits import service
+from wr3_api.domain.enums import Chain, UserIntent, Visibility
 from wr3_api.domain.schemas import ScoutTarget
 from wr3_api.main import create_app
 from wr3_api.services import target_discovery
@@ -69,6 +72,11 @@ def test_scout_run_once_queues_passive_audit(monkeypatch):
     assert queued["chain"] == "base"
     assert queued["address"] == "0x4444444444444444444444444444444444444444"
     assert queued["owner_access_token"]
+    record = service.get_record(UUID(queued["audit_id"]))
+    assert record.request.visibility == Visibility.PRIVATE
+    assert record.request.user_intent == UserIntent.MONITORING
+    assert record.request.allow_bytecode_only is True
+    assert "scout_support_contact_must_be_verified_manually" in record.limitations
     status = client.get(queued["status_url"], params={"owner_token": queued["owner_access_token"]})
     assert status.status_code == 200
 
@@ -120,3 +128,59 @@ def test_review_queue_buckets_audits(monkeypatch):
     body = response.json()
     assert body["totals"]["total"] >= 1
     assert set(body["totals"]).issuperset({"ready_to_write", "needs_validation", "skip", "total"})
+
+
+def test_scout_autopilot_run_now_dedupes_recent_targets(monkeypatch):
+    async def fake_all(*args, **kwargs):
+        return [
+            ScoutTarget(
+                protocol_name="Autopilot Protocol",
+                slug="autopilot-protocol",
+                category="Testing",
+                chain=Chain.ARBITRUM,
+                address="0x7777777777777777777777777777777777777777",
+            )
+        ]
+
+    monkeypatch.setattr(target_discovery.TargetDiscoveryService, "discover_all_supported_networks", fake_all)
+    payload = {
+        "per_chain_limit": 1,
+        "min_tvl_usd": 0,
+        "process_queued": False,
+        "dedupe_window_hours": 24,
+    }
+
+    first = client.post(
+        "/v1/monitoring/scout/autopilot/run-now",
+        headers={"X-WR3-Reviewer": "true"},
+        json=payload,
+    )
+    second = client.post(
+        "/v1/monitoring/scout/autopilot/run-now",
+        headers={"X-WR3-Reviewer": "true"},
+        json=payload,
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["queued_count"] == 1
+    assert second.json()["queued_count"] == 0
+    assert second.json()["skipped_count"] == 1
+    assert any("duplicate_recent_target_skipped:arbitrum" in item for item in second.json()["limitations"])
+
+
+def test_scout_autopilot_status_endpoint_reports_guardrails():
+    response = client.get("/v1/monitoring/scout/autopilot")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["running"] is False
+    assert "autopilot_no_mainnet_broadcast" in body["limitations"]
+
+
+def test_scout_autopilot_write_endpoints_require_reviewer():
+    payload = {"per_chain_limit": 1, "process_queued": False}
+
+    assert client.post("/v1/monitoring/scout/autopilot/start").status_code == 403
+    assert client.post("/v1/monitoring/scout/autopilot/stop").status_code == 403
+    assert client.post("/v1/monitoring/scout/autopilot/run-now", json=payload).status_code == 403

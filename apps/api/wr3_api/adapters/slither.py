@@ -9,7 +9,7 @@ from wr3_api.adapters.base import EngineAdapter, EngineRunOptions, EngineRunResu
 from wr3_api.adapters.source_tree import materialize_source_tree
 from wr3_api.domain.enums import Chain, Exploitability, Severity
 from wr3_api.domain.schemas import ContractRef, Evidence, Finding, SourceLocation, Taxonomy
-from wr3_api.services.tool_paths import resolve_tool_binary
+from wr3_api.services.tool_paths import resolve_tool_binary, tool_subprocess_env
 
 
 class SlitherAdapter(EngineAdapter):
@@ -50,6 +50,7 @@ class SlitherAdapter(EngineAdapter):
                     "--filter-paths",
                     "node_modules|lib",
                     cwd=temp_dir,
+                    env=tool_subprocess_env(),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )

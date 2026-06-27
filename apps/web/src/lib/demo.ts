@@ -5,7 +5,7 @@ export const demoAudit: AuditSummary = {
   state: "completed",
   chain: "base",
   address: "0x0000000000000000000000000000000000000000",
-  tier: "free",
+  tier: "pro",
   progress: 100,
   score: {
     score_version: "wr3-score-v0.1",
@@ -24,7 +24,7 @@ export const demoAudit: AuditSummary = {
       behavior: 0.15
     }
   },
-  limitations: ["demo_data", "poc_requires_paid_tier"],
+  limitations: ["demo_data"],
   failed_stages: [],
   engine_version: "wr3-engine-v0.1",
   score_version: "wr3-score-v0.1",

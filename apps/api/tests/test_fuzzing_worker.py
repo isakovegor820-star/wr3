@@ -35,7 +35,7 @@ async def test_deep_team_audit_records_fuzzing_worker_result():
 
 
 @pytest.mark.asyncio
-async def test_fuzzing_worker_blocks_non_team_tiers():
+async def test_fuzzing_worker_does_not_block_legacy_hobby_tier():
     worker = FuzzingWorker()
     record = AuditRecord(
         request=CreateAuditRequest(
@@ -50,4 +50,7 @@ async def test_fuzzing_worker_blocks_non_team_tiers():
     result = await worker.run(record, [])
 
     assert result.status == "skipped"
-    assert result.error == "fuzzing_requires_team_or_pro_tier"
+    assert result.error in {
+        "fuzzing_binaries_missing",
+        "fuzzing_generation_stub_requires_invariant_sandbox",
+    }

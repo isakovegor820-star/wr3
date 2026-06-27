@@ -28,7 +28,6 @@ WEB_ROUTES = [
     ("/dashboard", "dashboard"),
     ("/telegram-emulator", "telegram_emulator"),
     ("/tg", "telegram_mini_app_preview"),
-    ("/billing", "billing_mock"),
     ("/disclosure", "disclosure_ui"),
 ]
 FIXTURE_FILES = [
@@ -236,7 +235,6 @@ def api_checks(api_running: bool) -> list[Check]:
         "requested_depth": "preliminary",
         "visibility": "private",
         "user_intent": "pre_launch_self_check",
-        "tier": "free",
     }
     scan_ok, scan_status, scan_result = http_request(
         "http://127.0.0.1:8001/v1/audits",
@@ -336,14 +334,14 @@ def main() -> int:
             "runtime",
             "configured" if api_running else "manual",
             "API port 8001 is open" if api_running else "API is not currently running",
-            "Start API with npm run dev:api.",
+            "Start localhost stack with npm run dev:local.",
         ),
         Check(
             "web_port",
             "runtime",
             "configured" if web_running else "manual",
             "Web port 3001 is open" if web_running else "Web is not currently running",
-            "Start web with npm run dev:web.",
+            "Start localhost stack with npm run dev:local.",
         ),
         Check(
             "artifact_dir",
@@ -368,7 +366,6 @@ def main() -> int:
     local_commands = [
         ("poc_local_command", "poc", ["npm", "run", "poc:local"]),
         ("fuzzing_local_command", "fuzzing", ["npm", "run", "fuzzing:local"]),
-        ("benchmark_local_command", "benchmark", ["npm", "run", "benchmark:local"]),
     ]
     for check_id, area, command in local_commands:
         ok, output = run(command, timeout=45)
@@ -377,8 +374,42 @@ def main() -> int:
                 check_id,
                 area,
                 "configured" if ok else "todo",
-                f"{' '.join(command)} completed" if ok else (output.splitlines()[-1] if output else "command failed without output"),
+                f"{' '.join(command)} completed"
+                if ok
+                else (output.splitlines()[-1] if output else "command failed without output"),
                 f"Fix {' '.join(command)}.",
+            )
+        )
+    run_long_benchmarks = (
+        values.get("WR3_READINESS_RUN_LONG_BENCHMARKS") == "true"
+        or os.getenv("WR3_READINESS_RUN_LONG_BENCHMARKS") == "true"
+    )
+    if run_long_benchmarks:
+        benchmark_timeout = int(
+            values.get("WR3_READINESS_BENCHMARK_TIMEOUT_SECONDS")
+            or os.getenv("WR3_READINESS_BENCHMARK_TIMEOUT_SECONDS")
+            or 180
+        )
+        ok, output = run(["npm", "run", "benchmark:local"], timeout=benchmark_timeout)
+        checks.append(
+            Check(
+                "benchmark_local_command",
+                "benchmark",
+                "configured" if ok else "todo",
+                "npm run benchmark:local completed"
+                if ok
+                else (output.splitlines()[-1] if output else "command failed without output"),
+                "Increase WR3_READINESS_BENCHMARK_TIMEOUT_SECONDS or inspect npm run benchmark:local.",
+            )
+        )
+    else:
+        checks.append(
+            Check(
+                "benchmark_local_command",
+                "benchmark",
+                "manual",
+                "Long benchmark skipped by local:readiness default path",
+                "Run WR3_READINESS_RUN_LONG_BENCHMARKS=true npm run local:readiness or npm run benchmark:local.",
             )
         )
 

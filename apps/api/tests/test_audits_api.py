@@ -57,7 +57,9 @@ def test_create_audit_with_source_completes_report():
 
     raw_outputs = client.get(f"/v1/audits/{audit_id}/raw-outputs", params={"owner_token": owner_token})
     assert raw_outputs.status_code == 200
-    assert raw_outputs.json()["gated"] is True
+    raw_payload = raw_outputs.json()
+    assert raw_payload["gated"] is False
+    assert raw_payload["reason"] == "owner_verified_private_artifact_access"
 
     events = client.get(f"/v1/audits/{audit_id}/events", params={"owner_token": owner_token})
     assert events.status_code == 200
@@ -142,10 +144,18 @@ def test_disclosure_case_stub():
     contact = client.post(
         f"/v1/disclosure-cases/{case['id']}/contact-log",
         headers={"X-WR3-Reviewer": "true"},
-        json={"channel": "email", "message": "security@example.com contacted"},
+        json={"channel": "draft", "message": "Safe responsible disclosure draft. No auto-send."},
     )
     assert contact.status_code == 200
-    assert any("security@example.com contacted" in item for item in contact.json()["contact_log"])
+    assert any("Safe responsible disclosure draft" in item for item in contact.json()["contact_log"])
+
+    manual = client.post(
+        f"/v1/disclosure-cases/{case['id']}/contact-log",
+        headers={"X-WR3-Reviewer": "true"},
+        json={"channel": "manual_email", "message": "Operator manually sent the message outside wr3."},
+    )
+    assert manual.status_code == 200
+    assert any("manual_email" in item for item in manual.json()["contact_log"])
 
     advanced = client.post(
         f"/v1/disclosure-cases/{case['id']}/advance",

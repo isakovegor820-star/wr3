@@ -203,6 +203,21 @@ class AuthService:
             limitations=["telegram_init_data_verified", "telegram_account_created_with_explicit_consent"],
         )
 
+    def _is_reviewer(self, x_wr3_reviewer: str | None) -> bool:
+        """Reviewer access from the X-WR3-Reviewer header.
+
+        If a reviewer token is configured the header must equal it (constant-time
+        compare). Otherwise the legacy ``"true"`` header is honored only in local
+        development — outside development a token is mandatory, so an unauthenticated
+        header can no longer grant reviewer (and thus owner-of-all) access.
+        """
+        if not x_wr3_reviewer:
+            return False
+        settings = get_settings()
+        if settings.reviewer_token:
+            return secrets.compare_digest(x_wr3_reviewer, settings.reviewer_token)
+        return settings.environment == "development" and x_wr3_reviewer == "true"
+
     def context_from_headers(
         self,
         *,
@@ -218,7 +233,7 @@ class AuthService:
                     user_id=session.user_id,
                     provider=session.provider,
                     subject=session.subject,
-                    is_reviewer=x_wr3_reviewer == "true",
+                    is_reviewer=self._is_reviewer(x_wr3_reviewer),
                 )
         if x_wr3_user:
             subject = x_wr3_user.strip()
@@ -226,9 +241,9 @@ class AuthService:
                 user_id=f"dev:{subject}",
                 provider="dev-header",
                 subject=subject,
-                is_reviewer=x_wr3_reviewer == "true",
+                is_reviewer=self._is_reviewer(x_wr3_reviewer),
             )
-        return AuthContext(is_reviewer=x_wr3_reviewer == "true")
+        return AuthContext(is_reviewer=self._is_reviewer(x_wr3_reviewer))
 
     def _create_session(
         self,

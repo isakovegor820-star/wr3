@@ -9,7 +9,7 @@ from wr3_api.adapters.base import EngineAdapter, EngineRunOptions, EngineRunResu
 from wr3_api.adapters.source_tree import materialize_source_tree
 from wr3_api.domain.enums import Chain, Exploitability, Severity
 from wr3_api.domain.schemas import ContractRef, Evidence, Finding, SourceLocation, Taxonomy
-from wr3_api.services.tool_paths import resolve_tool_binary
+from wr3_api.services.tool_paths import resolve_tool_binary, tool_subprocess_env
 
 
 class WakeAdapter(EngineAdapter):
@@ -47,6 +47,7 @@ class WakeAdapter(EngineAdapter):
                     "json",
                     "all",
                     cwd=temp_dir,
+                    env=tool_subprocess_env(),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -63,18 +64,22 @@ class WakeAdapter(EngineAdapter):
                         duration_ms=timer.duration_ms,
                     )
                 detections_path = Path(temp_dir) / ".wake" / "detections.json"
+                detections_written = detections_path.exists()
                 raw = (
                     detections_path.read_text(encoding="utf-8")
-                    if detections_path.exists()
+                    if detections_written
                     else stdout.decode(errors="replace")
                 )
 
-        if proc.returncode != 0:
+        # Wake exits non-zero (e.g. 3) precisely when it *reports* detections, so a
+        # non-zero return code is only a real failure when no detections file was
+        # written.
+        if not detections_written and proc.returncode != 0:
             return EngineRunResult(
                 engine=self.name,
                 status="failed",
                 raw_output=stdout.decode(errors="replace"),
-                error=stderr.decode(errors="replace"),
+                error=stderr.decode(errors="replace") or stdout.decode(errors="replace"),
                 duration_ms=timer.duration_ms,
             )
 

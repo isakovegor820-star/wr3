@@ -31,7 +31,7 @@ def main() -> int:
 
     payload: dict[str, object] = {
         "url": webhook_url,
-        "allowed_updates": ["message", "edited_message"],
+        "allowed_updates": ["message", "edited_message", "callback_query"],
         "drop_pending_updates": False,
     }
     if secret_token:

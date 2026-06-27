@@ -1,10 +1,12 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from wr3_api.api.routes import (
     audits,
     auth,
-    billing,
     disclosure,
     health,
     integrations,
@@ -20,10 +22,21 @@ from wr3_api.core.config import get_settings
 
 def create_app() -> FastAPI:
     settings = get_settings()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        if settings.scout_autopilot_enabled:
+            await monitoring.scout_autopilot.start()
+        try:
+            yield
+        finally:
+            await monitoring.scout_autopilot.stop()
+
     app = FastAPI(
         title="wr3 API",
         version="0.1.0",
         description="API MVP для ИИ-предаудита и триажа рисков смарт-контрактов.",
+        lifespan=lifespan,
     )
     app.add_middleware(
         CORSMiddleware,
@@ -38,7 +51,6 @@ def create_app() -> FastAPI:
     app.include_router(monitoring.router)
     app.include_router(news.router)
     app.include_router(auth.router)
-    app.include_router(billing.router)
     app.include_router(audits.router)
     app.include_router(notifications.router)
     app.include_router(projects.router)

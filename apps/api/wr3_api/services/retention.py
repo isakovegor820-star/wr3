@@ -24,11 +24,11 @@ class RetentionRunResult:
 
 
 class RetentionService:
-    """Tier-retention enforcement boundary.
+    """Audit retention boundary.
 
     The service intentionally deletes only audit records through the repository.
     Production R2/KMS artifact deletion is a separate adapter and must be wired
-    before paid launch.
+    before public launch.
     """
 
     def __init__(self, repository: AuditRepository) -> None:
@@ -66,7 +66,7 @@ class RetentionService:
                 RetentionDecision(
                     audit_id=str(record.audit_id),
                     action="delete" if not dry_run else "would_delete",
-                    reason="tier_retention_expired",
+                    reason="retention_window_expired",
                     retention_until=record.retention_until.isoformat(),
                 )
             )
