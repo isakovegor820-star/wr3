@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -44,9 +45,25 @@ def create_app() -> FastAPI:
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         if settings.scout_autopilot_enabled:
             await monitoring.scout_autopilot.start()
+        bot_task: asyncio.Task[None] | None = None
+        if settings.telegram_bot_token and settings.telegram_reviewer_user_ids:
+            from wr3_api.services.telegram_bot import TelegramCommandBot
+
+            bot = TelegramCommandBot(
+                audit_service=monitoring.audit_service,
+                scout_autopilot=monitoring.scout_autopilot,
+                settings=settings,
+            )
+            bot_task = asyncio.create_task(bot.run(), name="wr3-telegram-bot")
         try:
             yield
         finally:
+            if bot_task is not None:
+                bot_task.cancel()
+                try:
+                    await bot_task
+                except asyncio.CancelledError:
+                    pass
             await monitoring.scout_autopilot.stop()
             close_all_pools()
 

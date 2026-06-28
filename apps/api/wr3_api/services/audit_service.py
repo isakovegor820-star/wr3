@@ -186,6 +186,46 @@ class AuditService:
     def save_record(self, record: AuditRecord) -> None:
         self._audit_repository.save(record)
 
+    def find_record_by_id_prefix(self, prefix: str) -> AuditRecord | None:
+        """Look up an audit by the short 8-char id shown in alerts (used by the bot)."""
+        prefix = prefix.lower()
+        for record in self._audit_repository.list_records():
+            if str(record.audit_id).lower().startswith(prefix):
+                return record
+        return None
+
+    def bounty_submission_for(self, record: AuditRecord) -> str | None:
+        """Render a ready-to-edit bounty submission for the record's top finding
+        (prefer a confirmed high/critical)."""
+        high = [f for f in record.findings if f.severity in {Severity.CRITICAL, Severity.HIGH}]
+        confirmed = [f for f in high if f.exploitability == Exploitability.CONFIRMED]
+        pool = confirmed or high or record.findings
+        if not pool:
+            return None
+        return self._renderer.render_bounty_submission(record, pool[0])
+
+    def candidate_queue(self, *, limit: int = 10) -> list[dict[str, object]]:
+        """Recent audits that surfaced a high/critical finding, newest first."""
+        out: list[dict[str, object]] = []
+        for record in sorted(self._audit_repository.list_records(), key=lambda r: r.updated_at, reverse=True):
+            high = [f for f in record.findings if f.severity in {Severity.CRITICAL, Severity.HIGH}]
+            if not high:
+                continue
+            top = next((f for f in high if f.exploitability == Exploitability.CONFIRMED), high[0])
+            out.append(
+                {
+                    "id": str(record.audit_id)[:8],
+                    "chain": str(record.request.chain),
+                    "program": record.request.bounty.program if record.request.bounty else None,
+                    "severity": str(top.severity),
+                    "confirmed": top.exploitability == Exploitability.CONFIRMED,
+                    "bug": top.taxonomy.wr3_category,
+                }
+            )
+            if len(out) >= limit:
+                break
+        return out
+
     def find_recent_monitoring_audit(
         self,
         *,
