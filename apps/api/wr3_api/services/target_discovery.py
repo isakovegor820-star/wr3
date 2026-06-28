@@ -9,6 +9,7 @@ import httpx
 from wr3_api.core.config import Settings, get_settings
 from wr3_api.domain.enums import Chain
 from wr3_api.domain.schemas import EVM_ADDRESS_RE, ScoutTarget
+from wr3_api.services.bounty_sources import normalize_immunefi_bounties
 
 
 SUPPORTED_CHAIN_ALIASES: dict[str, Chain] = {
@@ -89,6 +90,38 @@ class TargetDiscoveryService:
                     continue
                 seen.add(key)
                 targets.append(target)
+        return targets
+
+    async def discover_immunefi_targets(
+        self,
+        *,
+        limit: int | None = None,
+        min_payout_usd: float = 0.0,
+        chains: list[Chain] | None = None,
+    ) -> list[ScoutTarget]:
+        """In-scope, paying Immunefi smart-contract targets, highest payout first.
+
+        Returns [] (never raises) when the feed is disabled, unreachable, or
+        malformed — a bounty-source outage must not break the scout cycle.
+        """
+        if not self._settings.immunefi_enabled or not self._settings.immunefi_bounties_url:
+            return []
+        try:
+            async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": "wr3-scout/1.0"}) as client:
+                response = await client.get(self._settings.immunefi_bounties_url)
+                response.raise_for_status()
+            payload = response.json()
+            targets = normalize_immunefi_bounties(
+                payload,
+                min_payout_usd=min_payout_usd,
+                limit=limit,
+                max_per_program=self._settings.immunefi_max_per_program,
+            )
+        except (httpx.HTTPError, ValueError, TypeError):
+            return []
+        allowed = set(chains or [])
+        if allowed:
+            targets = [target for target in targets if target.chain in allowed]
         return targets
 
 
