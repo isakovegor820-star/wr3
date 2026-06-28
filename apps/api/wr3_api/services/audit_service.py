@@ -868,7 +868,9 @@ class AuditService:
             candidates = high_risk_poc_candidates(record.findings)
             poc_result = await self._poc_worker.run(record, candidates)
             self._poc_worker.record_result(record, poc_result, candidates)
-            self._apply_poc_confirmation(record, poc_result.confirmed_finding_ids)
+            self._apply_poc_confirmation(
+                record, poc_result.confirmed_finding_ids, poc_result.artifact_uri
+            )
             if record.request.requested_depth == "deep":
                 self._transition(record, AuditState.FUZZING_RUNNING, reason="fuzzing_started")
                 fuzz_result = await self._fuzz_worker.run(record, record.findings)
@@ -899,17 +901,38 @@ class AuditService:
         self._audit_repository.save(record)
         await self._maybe_alert_owner(record)
 
-    def _apply_poc_confirmation(self, record: AuditRecord, confirmed_ids: tuple[str, ...]) -> None:
-        """Write PoC confirmation back onto findings so disclosure-readiness and
-        scoring — which key off ``exploitability == CONFIRMED`` — actually react to a
-        confirmed exploit instead of the confirmation being recorded only as an event."""
+    def _apply_poc_confirmation(
+        self,
+        record: AuditRecord,
+        confirmed_ids: tuple[str, ...],
+        artifact_uri: str | None = None,
+    ) -> None:
+        """Write PoC confirmation back onto findings so disclosure-readiness,
+        scoring and the rendered report — which key off ``exploitability ==
+        CONFIRMED`` and ``evidence.poc_status == CONFIRMED`` — actually react to a
+        confirmed exploit instead of the confirmation being recorded only as an
+        event. Both fields are updated together so a finding never claims a
+        confirmed exploitability while its evidence still reads ``not_attempted``."""
         if not confirmed_ids:
             return
         confirmed = set(confirmed_ids)
         for index, finding in enumerate(record.findings):
-            if finding.id in confirmed and finding.exploitability != Exploitability.CONFIRMED:
+            already = (
+                finding.exploitability == Exploitability.CONFIRMED
+                and finding.evidence.poc_status == PocStatus.CONFIRMED
+            )
+            if finding.id in confirmed and not already:
+                evidence = finding.evidence.model_copy(
+                    update={
+                        "poc_status": PocStatus.CONFIRMED,
+                        "poc_artifact_uri": artifact_uri or finding.evidence.poc_artifact_uri,
+                    }
+                )
                 record.findings[index] = finding.model_copy(
-                    update={"exploitability": Exploitability.CONFIRMED}
+                    update={
+                        "exploitability": Exploitability.CONFIRMED,
+                        "evidence": evidence,
+                    }
                 )
 
     async def _maybe_alert_owner(self, record: AuditRecord) -> None:
