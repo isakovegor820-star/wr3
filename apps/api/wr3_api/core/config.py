@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     artifact_dir: str = ".omx/artifacts"
     artifact_encryption_key: str | None = None
     poc_max_attempts: int = 5
+    poc_fork_rpc_url: str | None = None  # when set + target has a deployed address, run PoC against a live fork
+    poc_fork_block: int | None = None  # pin the fork to a block for reproducible exploits
+    fuzz_test_limit: int = 50000  # medusa tx budget before giving up on a counterexample
+    fuzz_timeout_seconds: int = 45  # wall-clock cap for a single medusa campaign
     llm_provider: str = "disabled"
     llm_model: str = "local-deterministic-triage"
     llm_zdr_required: bool = True
