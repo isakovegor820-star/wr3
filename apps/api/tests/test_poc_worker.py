@@ -1,9 +1,100 @@
+import shutil
+
 import pytest
 
-from wr3_api.domain.enums import Chain, Tier
-from wr3_api.domain.schemas import AuditRecord, CreateAuditRequest
+from wr3_api.domain.enums import Chain, Exploitability, Severity, Tier
+from wr3_api.domain.schemas import AuditRecord, ContractRef, CreateAuditRequest, Finding, Taxonomy
 from wr3_api.services.audit_service import AuditService
-from wr3_api.services.poc import FoundryPocWorker, build_foundry_test, ensure_solidity_pragma
+from wr3_api.services.poc import (
+    ForkContext,
+    FoundryPocWorker,
+    build_foundry_test,
+    build_reentrancy_exploit,
+    ensure_solidity_pragma,
+)
+
+_OWN_VULN = """// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+contract Vault {
+    address public owner;
+    constructor() { owner = msg.sender; }
+    function setOwner(address n) public { owner = n; }
+}
+"""
+_OWN_SAFE = _OWN_VULN.replace("{ owner = n; }", '{ require(msg.sender == owner, "only"); owner = n; }')
+_SD_VULN = """// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+contract Killable {
+    address public owner;
+    constructor() { owner = msg.sender; }
+    function kill() public { selfdestruct(payable(msg.sender)); }
+}
+"""
+_SD_SAFE = _SD_VULN.replace(
+    "{ selfdestruct(payable(msg.sender)); }",
+    '{ require(msg.sender == owner, "only"); selfdestruct(payable(msg.sender)); }',
+)
+
+
+def _candidate(source: str, category: str, summary: str) -> tuple[AuditRecord, Finding]:
+    record = AuditRecord(
+        request=CreateAuditRequest(
+            chain=Chain.BASE,
+            address="0x0000000000000000000000000000000000000000",
+            source=source,
+            requested_depth="deep",
+        )
+    )
+    finding = Finding(
+        audit_id=str(record.audit_id), chain=Chain.BASE, contract=ContractRef(name="T"),
+        taxonomy=Taxonomy(wr3_category=category), severity=Severity.HIGH, confidence=0.9,
+        exploitability=Exploitability.THEORETICAL, sources=["slither"],
+        summary=summary, description=summary, impact="i", recommendation="r",
+    )
+    return record, finding
+
+
+@pytest.mark.skipif(shutil.which("forge") is None, reason="foundry not installed")
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source,category,summary,strategy",
+    [
+        (_OWN_VULN, "access_control", "Unprotected setOwner: anyone can take ownership", "ownership_takeover"),
+        (_SD_VULN, "static_analysis", "Suicidal: unprotected selfdestruct", "selfdestruct"),
+    ],
+)
+async def test_poc_confirms_new_exploit_classes(source, category, summary, strategy):
+    record, finding = _candidate(source, category, summary)
+    result = await FoundryPocWorker().run(record, [finding])
+    assert result.status == "confirmed"
+    assert result.strategy == strategy
+    assert result.confirmed_finding_ids == (finding.id,)
+
+
+@pytest.mark.skipif(shutil.which("forge") is None, reason="foundry not installed")
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "source,category,summary",
+    [
+        (_OWN_SAFE, "access_control", "setOwner guarded by onlyOwner"),
+        (_SD_SAFE, "static_analysis", "selfdestruct guarded by onlyOwner"),
+    ],
+)
+async def test_poc_does_not_confirm_guarded_contracts(source, category, summary):
+    record, finding = _candidate(source, category, summary)
+    result = await FoundryPocWorker().run(record, [finding])
+    assert result.status != "confirmed"
+    assert result.confirmed_finding_ids == ()
+
+
+def test_fork_mode_codegen_uses_createselectfork_and_address_cast():
+    _, finding = _candidate("contract Bank {}", "reentrancy", "reentrancy")
+    fork = ForkContext(rpc_url="http://127.0.0.1:8545", address="0xabcDEF0000000000000000000000000000000123")
+    src = build_reentrancy_exploit("Bank", finding, fork)
+    assert 'vm.createSelectFork("http://127.0.0.1:8545")' in src
+    assert 'address(bytes20(hex"abcdef0000000000000000000000000000000123"))' in src
+    assert "target.deposit{value: pool}" not in src  # fork mode does not seed; the live pool is real
+    assert "WR3_CONFIRMED_EXPLOIT_ASSERTION" in src
 
 
 @pytest.mark.asyncio
