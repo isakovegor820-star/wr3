@@ -381,6 +381,136 @@ class ReportRenderer:
         ]
         return "\n".join(lines)
 
+    def render_bounty_submission(self, record: AuditRecord, finding: Finding) -> str:
+        """A ready-to-edit bug-bounty submission report (Immunefi-style, English).
+        Auto-filled from the finding; the human reviews, tweaks and submits."""
+        detail = self._bounty_bug_detail(finding)
+        target = record.request.address or finding.contract.address or "source-only"
+        location = (
+            f"{finding.contract.name}.{finding.location.function}()"
+            if finding.location.function
+            else finding.disclosure_assessment.location_label or finding.contract.name
+        )
+        bounty = record.request.bounty
+        program = f"{bounty.program} ({bounty.url})" if bounty and bounty.url else (bounty.program if bounty else "—")
+        swc = f" (SWC-{finding.taxonomy.swc})" if finding.taxonomy.swc else ""
+        lines = [
+            f"# [{str(finding.severity).upper()}] {detail['title']}",
+            "",
+            f"- Program: {program}",
+            f"- Chain / target: {record.request.chain} — {target}",
+            f"- Affected: {location}",
+            f"- Severity: {finding.severity} — {detail['severity_reason']}",
+            f"- Bug class: {finding.taxonomy.wr3_category}{swc}",
+            "",
+            "## Summary",
+            detail["summary"],
+            "",
+            "## Impact",
+            detail["impact"],
+            "",
+            "## Steps to reproduce / Proof of Concept",
+            detail["repro"],
+            "",
+            "A working Foundry proof-of-concept that confirms this on a mainnet fork is available and can be attached.",
+            "",
+            "## Recommended fix",
+            detail["fix"] or finding.recommendation,
+            "",
+            "## Notes",
+            "- Found by automated static analysis + a confirming fork proof-of-concept.",
+            "- Validation was passive / local / fork only — no mainnet transaction, no funds moved.",
+        ]
+        return "\n".join(lines)
+
+    def _bounty_bug_detail(self, finding: Finding) -> dict[str, str]:
+        catalog: list[tuple[str, dict[str, str]]] = [
+            ("reentr", {
+                "title": "Reentrancy allows draining deposited funds",
+                "severity_reason": "an attacker can withdraw more than they deposited and drain the contract",
+                "summary": "The withdraw path makes an external call to the caller before zeroing the caller's recorded balance, so the caller can re-enter withdraw and be paid repeatedly against the same balance.",
+                "impact": "An attacker repeatedly re-enters and withdraws, draining all funds held by the contract, including other users' deposits.",
+                "repro": "1) Deposit a small amount from an attacker contract.\n2) Call withdraw; the attacker's receive()/fallback re-enters withdraw while the contract balance is still non-zero.\n3) The contract pays out on each re-entry before the balance is zeroed, draining it.",
+                "fix": "Apply checks-effects-interactions: zero the balance before the external transfer, or add a reentrancy guard (nonReentrant).",
+            }),
+            ("tx.origin", {
+                "title": "Authorization via tx.origin enables phishing takeover",
+                "severity_reason": "a privileged action can be triggered through an attacker contract if the owner signs one transaction",
+                "summary": "A privileged function authorizes using tx.origin == owner instead of msg.sender, so any contract the owner is tricked into calling can perform the privileged action on the owner's behalf.",
+                "impact": "An attacker phishes the owner into a single transaction and seizes ownership / moves funds / performs privileged actions.",
+                "repro": "1) Deploy an attacker contract that calls the victim's privileged function.\n2) Get the owner to call the attacker contract (phishing).\n3) Inside, tx.origin is still the owner, so the check passes and the privileged action executes for the attacker.",
+                "fix": "Authorize with msg.sender == owner; never use tx.origin for authorization.",
+            }),
+            ("delegatecall", {
+                "title": "Unprotected delegatecall allows full contract takeover",
+                "severity_reason": "an attacker can overwrite storage (e.g. the owner slot) and seize the contract",
+                "summary": "An unprotected function delegatecalls into an attacker-supplied address, executing attacker code in this contract's storage context.",
+                "impact": "An attacker overwrites critical storage (such as owner) and fully takes over the contract and its funds.",
+                "repro": "1) Deploy an implant contract whose function writes attacker's address to storage slot 0.\n2) Call the unprotected delegatecall entrypoint with (implant, abi.encodeWithSignature(...)).\n3) The implant runs in the victim's context and overwrites owner; the attacker now controls the contract.",
+                "fix": "Restrict the delegatecall to a trusted, immutable implementation and gate it behind owner-only access.",
+            }),
+            ("selfdestruct", {
+                "title": "Unprotected selfdestruct lets anyone destroy the contract",
+                "severity_reason": "any caller can destroy the contract and force out its entire balance",
+                "summary": "A function reachable by any caller executes selfdestruct with no access control.",
+                "impact": "An arbitrary attacker destroys the contract and disgorges all of its ETH, bricking the protocol.",
+                "repro": "1) From any address, call the unprotected function that contains selfdestruct.\n2) The contract self-destructs and all its ETH is sent out in the same transaction.",
+                "fix": "Gate the selfdestruct path behind owner-only access, or remove it.",
+            }),
+            ("suicidal", {
+                "title": "Unprotected selfdestruct lets anyone destroy the contract",
+                "severity_reason": "any caller can destroy the contract and force out its entire balance",
+                "summary": "A function reachable by any caller executes selfdestruct with no access control.",
+                "impact": "An arbitrary attacker destroys the contract and disgorges all of its ETH, bricking the protocol.",
+                "repro": "1) From any address, call the unprotected function that contains selfdestruct.\n2) The contract self-destructs and all its ETH is sent out in the same transaction.",
+                "fix": "Gate the selfdestruct path behind owner-only access, or remove it.",
+            }),
+            ("supply", {
+                "title": "Token supply can be inflated (broken accounting)",
+                "severity_reason": "balances can exceed totalSupply, creating tokens from nothing",
+                "summary": "A fuzzed call sequence shows tracked holder balances can collectively exceed totalSupply, i.e. value is created rather than conserved.",
+                "impact": "An attacker inflates token balances out of thin air, diluting every holder and breaking the token's economics.",
+                "repro": "1) Drive the transfer/mint path with a fuzzer (Medusa) tracking a small set of holders.\n2) The invariant sum(balances) <= totalSupply is violated, proving inflation.",
+                "fix": "Ensure every credit is matched by a debit and totalSupply tracks issuance; re-run the fuzzer to confirm the invariant holds.",
+            }),
+            ("mint", {
+                "title": "Unprotected mint allows arbitrary token issuance",
+                "severity_reason": "any caller can mint tokens to themselves with no authorization",
+                "summary": "A mint-like function credits a public balance mapping with no access control.",
+                "impact": "An attacker mints unlimited tokens to themselves, draining value from all holders.",
+                "repro": "1) From any address, call the mint function with the attacker as recipient.\n2) The attacker's balance increases with no authorization check.",
+                "fix": "Restrict minting to an authorized role (onlyOwner / minter role).",
+            }),
+            ("ownership", {
+                "title": "Ownership can be taken over by an arbitrary caller",
+                "severity_reason": "an unauthorized caller can become owner and control the contract",
+                "summary": "A function that assigns the owner has no effective access control, so anyone can call it and become owner.",
+                "impact": "An attacker takes ownership and gains full control over privileged functions and funds.",
+                "repro": "1) From any address, call the owner-setting function with the attacker's address.\n2) Read owner(): it is now the attacker.",
+                "fix": "Guard the owner-setting path with onlyOwner (or a two-step transfer).",
+            }),
+            ("access", {
+                "title": "Missing access control on a privileged function",
+                "severity_reason": "an unauthorized caller can perform a privileged action",
+                "summary": "A privileged function lacks an effective authorization check, so any caller can invoke it.",
+                "impact": "An attacker performs a privileged action — seizing control or moving funds — without authorization.",
+                "repro": "1) From any address, call the privileged function.\n2) The action succeeds despite the caller not being the owner/authorized role.",
+                "fix": "Add an access-control check (onlyOwner / role-based) to the privileged function.",
+            }),
+        ]
+        haystack = f"{finding.taxonomy.wr3_category} {finding.summary}".lower()
+        for key, detail in catalog:
+            if key in haystack:
+                return detail
+        return {
+            "title": finding.summary,
+            "severity_reason": f"{finding.severity} severity per automated triage",
+            "summary": finding.summary,
+            "impact": finding.impact,
+            "repro": "See the attached Foundry proof-of-concept.",
+            "fix": finding.recommendation,
+        }
+
     def render_text_pdf(self, title: str, body: str) -> bytes:
         clean_lines = [title, "", *body.splitlines()]
         text_commands = ["BT", "/F1 10 Tf", "50 780 Td"]

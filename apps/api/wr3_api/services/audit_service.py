@@ -1068,6 +1068,10 @@ class AuditService:
         lines.append("")
         lines.append("🐞 Что нашли:")
         lines.append(self._plain_bug(top))
+        location = self._plain_location(top)
+        if location:
+            lines.append(f"📂 Место: {location}")
+        lines.append(f"💥 Чем грозит: {self._plain_impact(top)}")
         lines.append("")
         if is_confirmed:
             lines.append("✅ Проверено: робот написал атаку и выполнил её на копии контракта — баг настоящий.")
@@ -1115,6 +1119,38 @@ class AuditService:
             if key in haystack:
                 return explanation
         return finding.summary
+
+    def _plain_impact(self, finding: Finding) -> str:
+        """Plain-Russian 'what an attacker gains' for the owner alert."""
+        rules = [
+            ("reentr", "атакующий может вывести из контракта чужие средства."),
+            ("tx.origin", "можно выполнить привилегированные действия от имени владельца (фишинг)."),
+            ("delegatecall", "атакующий может полностью перехватить контракт."),
+            ("selfdestruct", "контракт можно уничтожить и забрать все его средства."),
+            ("suicidal", "контракт можно уничтожить и забрать все его средства."),
+            ("supply", "можно раздуть баланс токенов — обесценивание для всех держателей."),
+            ("mint", "можно напечатать токены без прав."),
+            ("accounting", "можно вывести больше средств, чем положено."),
+            ("ownership", "посторонний может стать владельцем и забрать управление/средства."),
+            ("access", "посторонний может выполнить действия владельца — забрать управление или средства."),
+        ]
+        haystack = f"{finding.taxonomy.wr3_category} {finding.summary}".lower()
+        for key, impact in rules:
+            if key in haystack:
+                return impact
+        return finding.impact or "возможна потеря средств или контроля над контрактом."
+
+    def _plain_location(self, finding: Finding) -> str:
+        """Readable code location for the owner alert, or '' if unknown."""
+        loc = finding.location
+        if loc.function:
+            return f"функция {loc.function}()"
+        if loc.start_line:
+            return f"строка {loc.start_line}" + (f" в {loc.file}" if loc.file else "")
+        label = finding.disclosure_assessment.location_label
+        if label and label not in {"Точное место не определено", "unknown"}:
+            return label
+        return ""
 
     def _annotate_findings_for_disclosure(self, record: AuditRecord) -> None:
         ai_fallback = any(
