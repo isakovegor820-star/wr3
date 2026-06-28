@@ -1044,13 +1044,23 @@ class AuditService:
         ]
         if not high:
             return
-        top = high[0]
-        title = f"wr3 alert: {len(high)} high/critical on {record.request.chain}"
-        body = (
-            f"{record.request.address or 'source scan'}\n"
-            f"Top: [{top.severity}] {top.summary}\n"
-            f"Audit: {record.audit_id}"
+        confirmed = [f for f in high if f.exploitability == Exploitability.CONFIRMED]
+        top = (confirmed or high)[0]
+        lines = [f"{record.request.chain}:{record.request.address or 'source scan'}"]
+        bounty = record.request.bounty
+        if bounty is not None:
+            payout = f" (до ${int(bounty.max_payout_usd):,})" if bounty.max_payout_usd else ""
+            lines.append(f"🎯 {bounty.platform}: {bounty.program}{payout}")
+        lines.append(f"[{top.severity}] {top.summary}")
+        lines.append(
+            "✅ подтверждён эксплойтом на форке" if top.exploitability == Exploitability.CONFIRMED
+            else "🟡 кандидат — нужна ручная проверка"
         )
+        if confirmed:
+            lines.append(f"confirmed: {len(confirmed)}/{len(high)} high/critical")
+        lines.append(f"{self._settings.web_base_url}/audits/{record.audit_id}?owner_token={record.owner_access_token}")
+        title = f"🔔 wr3: {len(high)} high/critical на {record.request.chain}"
+        body = "\n".join(lines)
         try:
             await self._notifications.send_owner_alert(title=title, body=body)
         except Exception:
