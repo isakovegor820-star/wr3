@@ -59,7 +59,9 @@ async def telegram_webhook(
     x_wr3_local_emulator: str | None = Header(default=None),
 ):
     settings = get_settings()
-    is_local_emulator = x_wr3_local_emulator == "true"
+    # The local emulator header may only bypass the webhook secret in development.
+    # In production it is ignored, so a real bot secret is always required.
+    is_local_emulator = x_wr3_local_emulator == "true" and settings.environment == "development"
     secret_ok = bool(settings.telegram_webhook_secret) and (
         x_telegram_bot_api_secret_token == settings.telegram_webhook_secret
     )
