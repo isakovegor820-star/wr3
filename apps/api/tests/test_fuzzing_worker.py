@@ -38,6 +38,35 @@ contract Bank {
 """
 
 
+_BUGGY_ERC20 = """// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+contract Tok {
+    mapping(address => uint256) public balanceOf;
+    uint256 public totalSupply;
+    constructor(uint256 s) { totalSupply = s; balanceOf[msg.sender] = s; }
+    function transfer(address to, uint256 amt) external returns (bool) {
+        balanceOf[to] += amt;   // BUG: never debits msg.sender -> supply inflation
+        return true;
+    }
+}
+"""
+
+_CORRECT_ERC20 = """// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+contract Tok {
+    mapping(address => uint256) public balanceOf;
+    uint256 public totalSupply;
+    constructor(uint256 s) { totalSupply = s; balanceOf[msg.sender] = s; }
+    function transfer(address to, uint256 amt) external returns (bool) {
+        require(balanceOf[msg.sender] >= amt, "insufficient");
+        balanceOf[msg.sender] -= amt;
+        balanceOf[to] += amt;
+        return true;
+    }
+}
+"""
+
+
 def _deep_record(source: str) -> AuditRecord:
     return AuditRecord(
         request=CreateAuditRequest(
@@ -65,6 +94,24 @@ async def test_medusa_finds_solvency_violation_in_buggy_bank():
 async def test_medusa_passes_correct_bank():
     worker = FuzzingWorker()
     result = await worker.run(_deep_record(_CORRECT_BANK), [])
+    assert result.status == "no_violations"
+    assert not result.violated_properties
+
+
+@pytest.mark.skipif(shutil.which("medusa") is None, reason="medusa not installed")
+@pytest.mark.asyncio
+async def test_medusa_finds_supply_inflation_in_buggy_erc20():
+    worker = FuzzingWorker()
+    result = await worker.run(_deep_record(_BUGGY_ERC20), [])
+    assert result.status == "counterexample_found"
+    assert any("supply" in prop for prop in result.violated_properties)
+
+
+@pytest.mark.skipif(shutil.which("medusa") is None, reason="medusa not installed")
+@pytest.mark.asyncio
+async def test_medusa_passes_correct_erc20():
+    worker = FuzzingWorker()
+    result = await worker.run(_deep_record(_CORRECT_ERC20), [])
     assert result.status == "no_violations"
     assert not result.violated_properties
 

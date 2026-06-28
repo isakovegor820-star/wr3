@@ -262,19 +262,28 @@ def _balance_accessor(source: str) -> str | None:
 
 
 def build_invariant_harness(source: str, target_name: str | None) -> str | None:
-    """Generate a Medusa invariant harness for a deposit/withdraw contract.
+    """Pick a Medusa invariant harness for the target, or None if no shape fits.
 
-    Returns None when the target does not expose the shape we can soundly fuzz
-    (a ``deposit``/``withdraw`` pair plus a public ``balances``/``balanceOf``
-    accessor). The invariant is *solvency*: the contract must always hold at
+    Registry of invariant strategies, tried in order:
+    - bank solvency (deposit/withdraw): the contract holds >= what it owes;
+    - ERC20 supply conservation: tracked holders never exceed totalSupply.
+    """
+    if not target_name:
+        return None
+    bank = _build_bank_solvency_harness(source, target_name)
+    if bank is not None:
+        return bank
+    return _build_erc20_supply_harness(source, target_name)
+
+
+def _build_bank_solvency_harness(source: str, target_name: str) -> str | None:
+    """Solvency invariant for a deposit/withdraw contract: it must always hold at
     least the sum of the balances it still owes. A correct contract upholds this
     with equality; an accounting bug (e.g. a withdraw that fails to zero the
     balance) makes the recorded debt exceed the ETH on hand. Legitimate yield
     keeps balance >= debt, so this does not false-positive on interest-bearing
     vaults — we only flag genuine value loss, never normal accrual.
     """
-    if not target_name:
-        return None
     lowered = source.lower()
     if "function deposit" not in lowered or "function withdraw" not in lowered:
         return None
@@ -337,6 +346,87 @@ contract Wr3Invariants {{
 """
 
 
+_CTOR_DEFAULTS = {"uint": "1000000 ether", "address": "address(this)", "bool": "true"}
+
+
+def _simple_constructor_args(source: str) -> str | None:
+    """Build a default constructor-arg string for a token, or None if the
+    constructor needs a type we cannot synthesise (string/bytes/struct)."""
+    match = re.search(r"\bconstructor\s*\(([^)]*)\)", source)
+    if not match or not match.group(1).strip():
+        return ""
+    args: list[str] = []
+    for piece in match.group(1).split(","):
+        type_name = piece.strip().split()[0] if piece.strip() else ""
+        if type_name.startswith("uint"):
+            args.append(_CTOR_DEFAULTS["uint"])
+        elif type_name.startswith("address"):
+            args.append(_CTOR_DEFAULTS["address"])
+        elif type_name.startswith("bool"):
+            args.append(_CTOR_DEFAULTS["bool"])
+        else:
+            return None
+    return ", ".join(args)
+
+
+def _build_erc20_supply_harness(source: str, target_name: str) -> str | None:
+    """Supply-conservation invariant for an ERC20-shaped token: the tracked
+    holders can never collectively hold MORE than totalSupply. A transfer that
+    fails to debit the sender (or otherwise inflates balances) breaks it. Using
+    ``<=`` keeps it false-positive-free even when the initial supply is not all
+    held by the harness — we only flag genuine inflation, never normal layout.
+
+    Complements the PoC erc20_mint strategy (which catches unprotected mint);
+    this catches transfer-accounting bugs through fuzzed call sequences.
+    """
+    lowered = source.lower()
+    if _balance_accessor(source) != "balanceOf":
+        return None
+    if "totalsupply" not in lowered or "function transfer" not in lowered:
+        return None
+    ctor_args = _simple_constructor_args(source)
+    if ctor_args is None:
+        return None
+    return f"""// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+
+import "./Target.sol";
+
+// wr3 Medusa ERC20 supply-conservation harness for {target_name}.
+contract Wr3Invariants {{
+    {target_name} private token;
+    address private a1 = address(0xA1);
+    address private a2 = address(0xA2);
+
+    constructor() payable {{
+        token = new {target_name}({ctor_args});
+    }}
+
+    function transferToA1(uint256 raw) public {{
+        uint256 bal = token.balanceOf(address(this));
+        if (bal == 0) {{
+            return;
+        }}
+        try token.transfer(a1, raw % (bal + 1)) {{}} catch {{}}
+    }}
+
+    function transferToA2(uint256 raw) public {{
+        uint256 bal = token.balanceOf(address(this));
+        if (bal == 0) {{
+            return;
+        }}
+        try token.transfer(a2, raw % (bal + 1)) {{}} catch {{}}
+    }}
+
+    // INVARIANT: tracked holders can never collectively exceed total supply.
+    function property_no_supply_inflation() public view returns (bool) {{
+        uint256 held = token.balanceOf(address(this)) + token.balanceOf(a1) + token.balanceOf(a2);
+        return held <= token.totalSupply();
+    }}
+}}
+"""
+
+
 def build_medusa_config(test_limit: int, timeout_seconds: int) -> dict:
     return {
         "fuzzing": {
@@ -389,7 +479,7 @@ def parse_medusa_output(output: str, returncode: int | None) -> dict:
     if (failed and failed > 0) or violated:
         return {
             "status": "counterexample_found",
-            "violated_properties": violated or (["property_bank_solvent"] if failed else []),
+            "violated_properties": violated or (["property_invariant_violated"] if failed else []),
             "counterexample": counterexample,
             "reason": "medusa_invariant_violated",
         }

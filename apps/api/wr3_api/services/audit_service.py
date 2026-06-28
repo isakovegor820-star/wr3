@@ -970,23 +970,37 @@ class AuditService:
                 )
 
     def _apply_fuzz_counterexample(self, record: AuditRecord, result: FuzzWorkerResult) -> None:
-        """When Medusa breaks the solvency invariant it has produced a concrete,
-        shrunk call sequence that extracts value — an autonomously discovered,
-        confirmed accounting defect. Record it as a first-class finding so scoring,
-        disclosure and the report react to it, not just an engine event."""
+        """When Medusa breaks an invariant it has produced a concrete, shrunk call
+        sequence — an autonomously discovered, confirmed accounting defect. Record
+        it as a first-class finding so scoring, disclosure and the report react to
+        it, not just an engine event."""
         if result.status != "counterexample_found":
             return
         if any(
             finding.taxonomy.wr3_category == "accounting" and "medusa" in finding.sources
             for finding in record.findings
         ):
-            return  # already raised this campaign's solvency finding
-        properties = ", ".join(result.violated_properties) or "property_bank_solvent"
+            return  # already raised this campaign's invariant finding
+        properties = ", ".join(result.violated_properties) or "an invariant"
+        if any("supply" in prop.lower() for prop in result.violated_properties):
+            summary = "Medusa broke the supply-conservation invariant: balances exceed total supply"
+            detail = "a fuzzed transfer sequence inflated token balances beyond totalSupply"
+            impact = "An attacker can inflate token balances out of thin air, diluting every holder."
+            recommendation = (
+                "Fix the transfer/mint accounting so every credit is matched by a debit and totalSupply "
+                "tracks issuance, then re-run the fuzzer to confirm the invariant holds."
+            )
+        else:
+            summary = "Medusa broke the solvency invariant: withdrawable value exceeds deposits"
+            detail = "the contract owed depositors more than the ETH it held"
+            impact = "An attacker can extract more funds than they deposited, draining other users' balances."
+            recommendation = (
+                "Fix the deposit/withdraw accounting (zero balances before the external transfer, apply "
+                "checks-effects-interactions), then re-run the fuzzer to confirm the invariant holds."
+            )
         description = (
-            f"Medusa's invariant fuzzer broke the solvency invariant ({properties}): after a "
-            "fuzzed call sequence the contract owed depositors more than the ETH it held, i.e. "
-            "an actor could withdraw more value than it deposited. This is a confirmed "
-            "accounting/solvency defect, reproduced deterministically by the fuzzer."
+            f"Medusa's invariant fuzzer broke {properties}: after a fuzzed call sequence {detail}. "
+            "This is a confirmed accounting defect, reproduced deterministically by the fuzzer."
         )
         counterexample = (result.counterexample or "").strip()
         if counterexample:
@@ -1002,13 +1016,10 @@ class AuditService:
                 exploitability=Exploitability.CONFIRMED,
                 sources=["medusa"],
                 evidence=Evidence(fuzzer_counterexample_uri=result.artifact_uri),
-                summary="Medusa broke the solvency invariant: withdrawable value exceeds deposits",
+                summary=summary,
                 description=description,
-                impact="An attacker can extract more funds than they deposited, draining other users' balances.",
-                recommendation=(
-                    "Fix the deposit/withdraw accounting (zero balances before the external transfer, "
-                    "apply checks-effects-interactions) and re-run the fuzzer to confirm the invariant holds."
-                ),
+                impact=impact,
+                recommendation=recommendation,
             )
         )
 
