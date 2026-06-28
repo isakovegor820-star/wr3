@@ -34,6 +34,45 @@ _SD_SAFE = _SD_VULN.replace(
     "{ selfdestruct(payable(msg.sender)); }",
     '{ require(msg.sender == owner, "only"); selfdestruct(payable(msg.sender)); }',
 )
+_TXO_VULN = """// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+contract Phishable {
+    address public owner;
+    constructor() { owner = msg.sender; }
+    function setOwner(address n) external { require(tx.origin == owner, "no"); owner = n; }
+}
+"""
+_TXO_SAFE = _TXO_VULN.replace("tx.origin == owner", "msg.sender == owner")
+_DC_VULN = """// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+contract Proxyish {
+    address public owner;
+    constructor() { owner = msg.sender; }
+    function execute(address t, bytes calldata d) external { (bool ok, ) = t.delegatecall(d); require(ok); }
+}
+"""
+_DC_SAFE = _DC_VULN.replace(
+    "function execute(address t, bytes calldata d) external {",
+    'function execute(address t, bytes calldata d) external { require(msg.sender == owner, "no");',
+)
+_MINT_VULN = """// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+contract Tok {
+    mapping(address => uint256) public balanceOf;
+    uint256 public totalSupply;
+    function mint(address to, uint256 amt) external { balanceOf[to] += amt; totalSupply += amt; }
+}
+"""
+_MINT_SAFE = """// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+contract Tok {
+    address public owner;
+    mapping(address => uint256) public balanceOf;
+    uint256 public totalSupply;
+    constructor() { owner = msg.sender; }
+    function mint(address to, uint256 amt) external { require(msg.sender == owner, "no"); balanceOf[to] += amt; totalSupply += amt; }
+}
+"""
 
 
 def _candidate(source: str, category: str, summary: str) -> tuple[AuditRecord, Finding]:
@@ -61,6 +100,9 @@ def _candidate(source: str, category: str, summary: str) -> tuple[AuditRecord, F
     [
         (_OWN_VULN, "access_control", "Unprotected setOwner: anyone can take ownership", "ownership_takeover"),
         (_SD_VULN, "static_analysis", "Suicidal: unprotected selfdestruct", "selfdestruct"),
+        (_TXO_VULN, "access_control", "tx.origin used for authorization (phishing)", "tx_origin"),
+        (_DC_VULN, "access_control", "controlled delegatecall enables takeover", "delegatecall"),
+        (_MINT_VULN, "access_control", "anyone can mint tokens, infinite supply", "erc20_mint"),
     ],
 )
 async def test_poc_confirms_new_exploit_classes(source, category, summary, strategy):
@@ -78,6 +120,9 @@ async def test_poc_confirms_new_exploit_classes(source, category, summary, strat
     [
         (_OWN_SAFE, "access_control", "setOwner guarded by onlyOwner"),
         (_SD_SAFE, "static_analysis", "selfdestruct guarded by onlyOwner"),
+        (_TXO_SAFE, "access_control", "access control authorization on setOwner"),
+        (_DC_SAFE, "access_control", "delegatecall takeover attempt"),
+        (_MINT_SAFE, "access_control", "anyone can mint infinite supply"),
     ],
 )
 async def test_poc_does_not_confirm_guarded_contracts(source, category, summary):
