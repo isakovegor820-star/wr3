@@ -30,9 +30,12 @@ from wr3_api.domain.schemas import (
     DisclosurePacketRequest,
     DisclosurePacketResponse,
     EngineRunSummary,
+    Evidence,
+    ContractRef,
     Finding,
     FindingReviewRequest,
     PublicProjectSummary,
+    Taxonomy,
     utc_now,
 )
 from wr3_api.domain.scoring import ScoreContext, score_audit
@@ -40,10 +43,15 @@ from wr3_api.domain.state_machine import STAGE_PROGRESS, assert_transition, can_
 from wr3_api.services.auth import AuditAccessContext, AuthContext
 from wr3_api.services.contracts import build_source_metadata
 from wr3_api.services.explorers import ExplorerSourcePuller, default_explorer_pullers
-from wr3_api.services.fuzzing import FuzzingWorker
+from wr3_api.services.fuzzing import FuzzingWorker, FuzzWorkerResult
 from wr3_api.services.llm_triage import LlmTriageRouter
 from wr3_api.services.notifications import NotificationService
-from wr3_api.services.poc import FoundryPocWorker, high_risk_poc_candidates
+from wr3_api.services.poc import (
+    FoundryPocWorker,
+    ensure_solidity_pragma,
+    extract_primary_contract,
+    high_risk_poc_candidates,
+)
 from wr3_api.services.quota import InMemoryQuotaLimiter
 from wr3_api.services.repository import (
     AuditRepository,
@@ -875,6 +883,7 @@ class AuditService:
                 self._transition(record, AuditState.FUZZING_RUNNING, reason="fuzzing_started")
                 fuzz_result = await self._fuzz_worker.run(record, record.findings)
                 self._fuzz_worker.record_result(record, fuzz_result)
+                self._apply_fuzz_counterexample(record, fuzz_result)
         else:
             record.limitations.append("poc_requires_standard_or_deep_depth")
 
@@ -934,6 +943,57 @@ class AuditService:
                         "evidence": evidence,
                     }
                 )
+
+    def _apply_fuzz_counterexample(self, record: AuditRecord, result: FuzzWorkerResult) -> None:
+        """When Medusa breaks the solvency invariant it has produced a concrete,
+        shrunk call sequence that extracts value — an autonomously discovered,
+        confirmed accounting defect. Record it as a first-class finding so scoring,
+        disclosure and the report react to it, not just an engine event."""
+        if result.status != "counterexample_found":
+            return
+        if any(
+            finding.taxonomy.wr3_category == "accounting" and "medusa" in finding.sources
+            for finding in record.findings
+        ):
+            return  # already raised this campaign's solvency finding
+        properties = ", ".join(result.violated_properties) or "property_bank_solvent"
+        description = (
+            f"Medusa's invariant fuzzer broke the solvency invariant ({properties}): after a "
+            "fuzzed call sequence the contract owed depositors more than the ETH it held, i.e. "
+            "an actor could withdraw more value than it deposited. This is a confirmed "
+            "accounting/solvency defect, reproduced deterministically by the fuzzer."
+        )
+        counterexample = (result.counterexample or "").strip()
+        if counterexample:
+            description += f"\n\nMinimal reproducing call sequence (shrunk by Medusa):\n{counterexample[:1500]}"
+        record.findings.append(
+            Finding(
+                audit_id=str(record.audit_id),
+                chain=record.request.chain,
+                contract=self._fuzz_target_contract(record),
+                taxonomy=Taxonomy(wr3_category="accounting"),
+                severity=Severity.HIGH,
+                confidence=0.95,
+                exploitability=Exploitability.CONFIRMED,
+                sources=["medusa"],
+                evidence=Evidence(fuzzer_counterexample_uri=result.artifact_uri),
+                summary="Medusa broke the solvency invariant: withdrawable value exceeds deposits",
+                description=description,
+                impact="An attacker can extract more funds than they deposited, draining other users' balances.",
+                recommendation=(
+                    "Fix the deposit/withdraw accounting (zero balances before the external transfer, "
+                    "apply checks-effects-interactions) and re-run the fuzzer to confirm the invariant holds."
+                ),
+            )
+        )
+
+    def _fuzz_target_contract(self, record: AuditRecord) -> ContractRef:
+        for finding in record.findings:
+            name = finding.contract.name if finding.contract else None
+            if name and name != "Unknown":
+                return finding.contract.model_copy()
+        source = ensure_solidity_pragma(record.request.source or "")
+        return ContractRef(name=extract_primary_contract(source) or "Unknown", address=record.request.address)
 
     async def _maybe_alert_owner(self, record: AuditRecord) -> None:
         """Alert the platform owner (reviewer Telegram) when an autonomous/monitoring

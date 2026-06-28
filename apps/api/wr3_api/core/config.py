@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     artifact_dir: str = ".omx/artifacts"
     artifact_encryption_key: str | None = None
     poc_max_attempts: int = 5
+    fuzz_test_limit: int = 50000  # medusa tx budget before giving up on a counterexample
+    fuzz_timeout_seconds: int = 45  # wall-clock cap for a single medusa campaign
     llm_provider: str = "disabled"
     llm_model: str = "local-deterministic-triage"
     llm_zdr_required: bool = True
