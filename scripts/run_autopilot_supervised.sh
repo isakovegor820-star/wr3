@@ -27,6 +27,15 @@ if [ ! -x "$UVICORN" ]; then
   exit 1
 fi
 
+# Pre-flight: a port already in use means another instance (or a stray dev
+# server) is running. Fail fast with a clear message instead of crash-looping
+# forever on "address already in use".
+if command -v lsof >/dev/null 2>&1 && lsof -ti "tcp:$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "[supervisor] port $PORT is already in use — another wr3 API or a stray dev server is running." >&2
+  echo "[supervisor] free it with:  lsof -ti tcp:$PORT | xargs kill -9   (or set WR3_API_PORT to another port)" >&2
+  exit 1
+fi
+
 # The autopilot must be on for this runner to do its job.
 export WR3_SCOUT_AUTOPILOT_ENABLED="${WR3_SCOUT_AUTOPILOT_ENABLED:-true}"
 
