@@ -21,3 +21,6 @@ external/
 *.log
 .claude/
 .impeccable/
+
+# machine-specific filled launchd plist (paths inside)
+infra/launchd/*.local.plist
