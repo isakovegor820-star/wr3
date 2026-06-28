@@ -30,6 +30,10 @@ fi
 # The autopilot must be on for this runner to do its job.
 export WR3_SCOUT_AUTOPILOT_ENABLED="${WR3_SCOUT_AUTOPILOT_ENABLED:-true}"
 
+# Run from the api dir so the .env (pydantic loads it relative to CWD) and
+# relative artifact paths resolve.
+cd "$API_DIR"
+
 backoff=2
 max_backoff=60
 echo "[supervisor] starting wr3 API + scout autopilot on $HOST:$PORT (logs: $LOG_DIR)"
