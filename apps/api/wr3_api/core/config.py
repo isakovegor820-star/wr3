@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     scout_autopilot_min_tvl_usd: float = 1_000_000
     scout_autopilot_dedupe_window_hours: int = 24
     scout_autopilot_process_queued: bool = True
+    # 24/7 self-healing: a watchdog restarts a dead loop and alerts on a stall.
+    scout_watchdog_interval_seconds: int = 60
+    scout_heartbeat_stall_factor: int = 3  # stalled if no heartbeat for factor*interval (+grace)
+    scout_max_consecutive_failures: int = 5  # unhealthy after this many failed cycles in a row
     rsshub_base_url: str | None = None
     helius_api_key: str | None = None
     helius_rpc_url: str | None = None

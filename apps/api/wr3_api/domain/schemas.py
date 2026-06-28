@@ -265,6 +265,10 @@ class ScoutAutopilotStatus(BaseModel):
     queued_total: int = 0
     last_run_at: datetime | None = None
     next_run_at: datetime | None = None
+    last_heartbeat_at: datetime | None = None
+    healthy: bool = True
+    consecutive_failures: int = 0
+    restart_count: int = 0
     last_error: str | None = None
     last_result: ScoutRunResult | None = None
     limitations: list[str] = Field(default_factory=list)

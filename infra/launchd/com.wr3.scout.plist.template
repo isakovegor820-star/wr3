@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  wr3 Scout autopilot — boot-time launchd service (macOS).
+
+  This template is NOT auto-installed. To run the scout 24/7 across reboots,
+  install it yourself:
+
+    1. Copy + fill the placeholders (__WR3_ROOT__, __WR3_DATABASE_URL__, and any
+       keys such as __WR3_ARTIFACT_ENCRYPTION_KEY__):
+         cp infra/launchd/com.wr3.scout.plist.template ~/Library/LaunchAgents/com.wr3.scout.plist
+         # then edit ~/Library/LaunchAgents/com.wr3.scout.plist
+    2. Load it:
+         launchctl load ~/Library/LaunchAgents/com.wr3.scout.plist
+    3. Check / stop:
+         launchctl list | grep com.wr3.scout
+         launchctl unload ~/Library/LaunchAgents/com.wr3.scout.plist
+
+  KeepAlive restarts the supervisor if it dies; the supervisor restarts uvicorn;
+  the in-process watchdog restarts the scan loop and pages the owner on a stall.
+-->
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.wr3.scout</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/bash</string>
+      <string>__WR3_ROOT__/scripts/run_autopilot_supervised.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>WR3_SCOUT_AUTOPILOT_ENABLED</key>
+      <string>true</string>
+      <key>WR3_DATABASE_URL</key>
+      <string>__WR3_DATABASE_URL__</string>
+      <key>WR3_ENVIRONMENT</key>
+      <string>production</string>
+      <!-- Required so contract source is encrypted at rest (see repository.py):
+      <key>WR3_ARTIFACT_ENCRYPTION_KEY</key>
+      <string>__WR3_ARTIFACT_ENCRYPTION_KEY__</string>
+      -->
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>__WR3_ROOT__</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__WR3_ROOT__/.wr3-logs/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>__WR3_ROOT__/.wr3-logs/launchd.err.log</string>
+  </dict>
+</plist>
