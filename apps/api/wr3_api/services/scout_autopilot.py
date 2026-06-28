@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from wr3_api.core.config import Settings, get_settings
 from wr3_api.domain.enums import AuditState, UserIntent, Visibility
@@ -17,6 +17,7 @@ from wr3_api.domain.schemas import (
 from wr3_api.services.audit_service import AuditService
 from wr3_api.services.auth import AuthContext
 from wr3_api.services.dispatcher import dispatch_audit_processing_detached
+from wr3_api.services.notifications import NotificationService
 from wr3_api.services.target_discovery import TargetDiscoveryService
 
 
@@ -44,17 +45,42 @@ class ScoutAutopilot:
         self._settings = settings or get_settings()
         self._audit_service = audit_service
         self._discovery = discovery_service or TargetDiscoveryService(self._settings)
+        self._notifications = NotificationService()
         self._task: asyncio.Task[None] | None = None
+        self._watchdog_task: asyncio.Task[None] | None = None
+        self._watchdog_stop: asyncio.Event | None = None
         self._processing_tasks: set[asyncio.Task[None]] = set()
         self._stop_event: asyncio.Event | None = None
         self._run_lock = asyncio.Lock()
         self._cycle_count = 0
         self._queued_total = 0
+        self._restart_count = 0
+        self._consecutive_failures = 0
+        self._stall_alerted = False
         self._manual_enabled = False
         self._last_run_at = None
         self._next_run_at = None
+        self._last_heartbeat_at: datetime | None = None
         self._last_error: str | None = None
         self._last_result: ScoutRunResult | None = None
+
+    def _heartbeat(self) -> None:
+        self._last_heartbeat_at = utc_now()
+
+    @property
+    def healthy(self) -> bool:
+        """A running loop that has emitted a recent heartbeat and isn't stuck in a
+        failure streak. Used by the watchdog and surfaced for external monitors."""
+        if not self.is_running:
+            return False
+        if self._last_heartbeat_at is None:
+            return True  # just started, first cycle not finished yet
+        interval = max(self._settings.scout_default_interval_seconds, 60)
+        threshold = interval * max(self._settings.scout_heartbeat_stall_factor, 1) + 120
+        age = (utc_now() - self._last_heartbeat_at).total_seconds()
+        if age > threshold:
+            return False
+        return self._consecutive_failures < max(self._settings.scout_max_consecutive_failures, 1)
 
     @property
     def is_running(self) -> bool:
@@ -73,6 +99,10 @@ class ScoutAutopilot:
             queued_total=self._queued_total,
             last_run_at=self._last_run_at,
             next_run_at=self._next_run_at,
+            last_heartbeat_at=self._last_heartbeat_at,
+            healthy=self.healthy,
+            consecutive_failures=self._consecutive_failures,
+            restart_count=self._restart_count,
             last_error=self._last_error,
             last_result=self._last_result,
             limitations=[
@@ -80,18 +110,34 @@ class ScoutAutopilot:
                 "autopilot_no_mainnet_broadcast",
                 "autopilot_no_auto_support_messages",
                 "autopilot_dedupes_recent_chain_address_targets",
+                "autopilot_watchdog_restarts_dead_loop_and_alerts_on_stall",
             ],
         )
 
     async def start(self) -> ScoutAutopilotStatus:
         if self.is_running:
+            self._start_watchdog()
             return self.status()
         self._manual_enabled = True
+        self._stall_alerted = False
         self._stop_event = asyncio.Event()
+        self._heartbeat()
         self._task = asyncio.create_task(self._loop(), name="wr3-scout-autopilot")
+        self._start_watchdog()
         return self.status()
 
     async def stop(self) -> ScoutAutopilotStatus:
+        # Tear the watchdog down first so it cannot resurrect the loop we are stopping.
+        if self._watchdog_stop is not None:
+            self._watchdog_stop.set()
+        watchdog = self._watchdog_task
+        if watchdog is not None and not watchdog.done():
+            watchdog.cancel()
+            try:
+                await watchdog
+            except asyncio.CancelledError:
+                pass
+        self._watchdog_task = None
         if self._stop_event is not None:
             self._stop_event.set()
         task = self._task
@@ -106,18 +152,70 @@ class ScoutAutopilot:
         self._next_run_at = None
         return self.status()
 
+    def _start_watchdog(self) -> None:
+        if self._watchdog_task is not None and not self._watchdog_task.done():
+            return
+        self._watchdog_stop = asyncio.Event()
+        self._watchdog_task = asyncio.create_task(self._watchdog(), name="wr3-scout-watchdog")
+
+    async def _watchdog(self) -> None:
+        """Supervise the scout loop: restart it if the task dies and page the owner
+        when it stalls, so the platform keeps hunting 24/7 without a babysitter."""
+        while self._watchdog_stop is not None and not self._watchdog_stop.is_set():
+            try:
+                await self._watchdog_tick()
+            except Exception:  # pragma: no cover - watchdog must never die
+                pass
+            interval = max(self._settings.scout_watchdog_interval_seconds, 1)
+            for _ in range(interval):
+                if self._watchdog_stop is None or self._watchdog_stop.is_set():
+                    return
+                await asyncio.sleep(1)
+
+    async def _watchdog_tick(self) -> None:
+        should_run = self._manual_enabled or self._settings.scout_autopilot_enabled
+        if not should_run:
+            return
+        if not self.is_running:
+            # The loop task died unexpectedly — bring it back.
+            self._restart_count += 1
+            self._stop_event = asyncio.Event()
+            self._heartbeat()
+            self._task = asyncio.create_task(self._loop(), name="wr3-scout-autopilot")
+            await self._alert_stall(f"scout loop was not running — auto-restarted (#{self._restart_count})")
+            return
+        if not self.healthy:
+            await self._alert_stall("scout loop is stalled (heartbeat stale or repeated cycle failures)")
+
+    async def _alert_stall(self, reason: str) -> None:
+        if self._stall_alerted:
+            return
+        self._stall_alerted = True
+        try:
+            await self._notifications.send_owner_alert(
+                title="wr3 scout autopilot unhealthy",
+                body=(
+                    f"{reason}. cycles={self._cycle_count} "
+                    f"consecutive_failures={self._consecutive_failures} last_error={self._last_error}"
+                ),
+            )
+        except Exception:  # pragma: no cover - alerting is best-effort
+            pass
+
     async def run_now(self, request: ScoutAutopilotRunRequest | None = None) -> ScoutRunResult:
         return await self._run_cycle(request or self._default_request())
 
     async def _loop(self) -> None:
         request = self._default_request()
         while self._stop_event is not None and not self._stop_event.is_set():
+            self._heartbeat()
             await self._run_cycle(request)
             delay = max(self._settings.scout_default_interval_seconds, 60)
             self._next_run_at = utc_now() + timedelta(seconds=delay)
             for _ in range(delay):
                 if self._stop_event.is_set():
                     return
+                self._heartbeat()
                 await asyncio.sleep(1)
 
     def _default_request(self) -> ScoutAutopilotRunRequest:
@@ -168,9 +266,12 @@ class ScoutAutopilot:
                 self._cycle_count += 1
                 self._queued_total += result.queued_count
                 self._last_result = result
+                self._consecutive_failures = 0
+                self._stall_alerted = False  # a clean cycle clears any stall alert latch
                 return result
             except Exception as exc:
                 self._last_error = f"{exc.__class__.__name__}:{exc}"
+                self._consecutive_failures += 1
                 result = ScoutRunResult(
                     source="defillama_protocols",
                     discovered_count=0,
