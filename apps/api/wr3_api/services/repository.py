@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID, uuid4
 
+from wr3_api.core.config import get_settings
 from wr3_api.domain.schemas import AuditRecord, DisclosureCase
 
 try:  # Optional at import time so local memory-only tests do not need Postgres.
@@ -13,8 +15,70 @@ except ImportError:  # pragma: no cover - exercised only in minimal installs
     psycopg = None
     Jsonb = None
 
+try:
+    from psycopg_pool import ConnectionPool
+except ImportError:  # pragma: no cover - exercised only in minimal installs
+    ConnectionPool = None
+
 
 SCHEMA_PATH = Path(__file__).resolve().parents[4] / "infra" / "postgres" / "001_core_schema.sql"
+
+_ENCRYPTION_MARKER = "wr3_enc_v1"
+_POOLS: dict[str, Any] = {}
+
+
+def _get_pool(database_url: str):
+    """One pooled connection set per database URL, shared across repositories, so
+    we stop paying a fresh TCP+auth handshake on every query."""
+    pool = _POOLS.get(database_url)
+    if pool is None:
+        if ConnectionPool is None:  # pragma: no cover - minimal installs
+            raise RuntimeError("psycopg_pool is required when WR3_DATABASE_URL is configured")
+        pool = ConnectionPool(database_url, min_size=1, max_size=10, open=True)
+        _POOLS[database_url] = pool
+    return pool
+
+
+def close_all_pools() -> None:
+    """Close pooled connections on shutdown so the pool's worker thread is joined
+    while the event loop is still alive (avoids a finalizer error at exit)."""
+    for pool in list(_POOLS.values()):
+        try:
+            pool.close()
+        except Exception:  # pragma: no cover - best-effort shutdown
+            pass
+    _POOLS.clear()
+
+
+class _PayloadCipher:
+    """Encrypts persisted record payloads at rest (the raw contract source lives
+    here). Reuses the platform artifact key; without a key configured it stays
+    plaintext for local dev and flags the gap to the caller."""
+
+    def __init__(self, key: str | None) -> None:
+        self._key = key
+
+    @property
+    def active(self) -> bool:
+        return bool(self._key)
+
+    def encrypt(self, payload: dict) -> dict:
+        if not self._key:
+            return payload
+        from cryptography.fernet import Fernet
+
+        token = Fernet(self._key.encode("utf-8")).encrypt(
+            json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        )
+        return {_ENCRYPTION_MARKER: token.decode("utf-8")}
+
+    def decrypt(self, stored: Any) -> Any:
+        if not isinstance(stored, dict) or _ENCRYPTION_MARKER not in stored:
+            return stored
+        from cryptography.fernet import Fernet
+
+        raw = Fernet(self._key.encode("utf-8")).decrypt(stored[_ENCRYPTION_MARKER].encode("utf-8"))
+        return json.loads(raw)
 
 
 class AuditRepository(Protocol):
@@ -71,11 +135,13 @@ class PostgresAuditRepository:
         if psycopg is None or Jsonb is None:
             raise RuntimeError("psycopg is required when WR3_DATABASE_URL is configured")
         self._database_url = database_url
+        self._pool = _get_pool(database_url)
+        self._cipher = _PayloadCipher(get_settings().artifact_encryption_key)
         self._ensure_schema()
 
     def save(self, record: AuditRecord) -> None:
-        payload = record.model_dump(mode="json")
-        with psycopg.connect(self._database_url) as conn:
+        payload = self._cipher.encrypt(record.model_dump(mode="json"))
+        with self._pool.connection() as conn:
             conn.execute(
                 """
                 insert into audit_jobs (
@@ -116,24 +182,24 @@ class PostgresAuditRepository:
             self._replace_child_rows(conn, record)
 
     def get(self, audit_id: UUID) -> AuditRecord | None:
-        with psycopg.connect(self._database_url) as conn:
+        with self._pool.connection() as conn:
             row = conn.execute("select payload from audit_jobs where id = %s", (audit_id,)).fetchone()
         if row is None:
             return None
-        return AuditRecord.model_validate(row[0])
+        return AuditRecord.model_validate(self._cipher.decrypt(row[0]))
 
     def list_records(self) -> list[AuditRecord]:
-        with psycopg.connect(self._database_url) as conn:
+        with self._pool.connection() as conn:
             rows = conn.execute("select payload from audit_jobs order by updated_at asc").fetchall()
-        return [AuditRecord.model_validate(row[0]) for row in rows]
+        return [AuditRecord.model_validate(self._cipher.decrypt(row[0])) for row in rows]
 
     def delete(self, audit_id: UUID) -> bool:
-        with psycopg.connect(self._database_url) as conn:
+        with self._pool.connection() as conn:
             result = conn.execute("delete from audit_jobs where id = %s", (audit_id,))
             return (result.rowcount or 0) > 0
 
     def _ensure_schema(self) -> None:
-        with psycopg.connect(self._database_url) as conn:
+        with self._pool.connection() as conn:
             conn.execute(SCHEMA_PATH.read_text(encoding="utf-8"))
 
     def _replace_child_rows(self, conn, record: AuditRecord) -> None:
@@ -198,11 +264,13 @@ class PostgresDisclosureRepository:
         if psycopg is None or Jsonb is None:
             raise RuntimeError("psycopg is required when WR3_DATABASE_URL is configured")
         self._database_url = database_url
+        self._pool = _get_pool(database_url)
+        self._cipher = _PayloadCipher(get_settings().artifact_encryption_key)
         self._ensure_schema()
 
     def save(self, case: DisclosureCase) -> None:
-        payload = case.model_dump(mode="json")
-        with psycopg.connect(self._database_url) as conn:
+        payload = self._cipher.encrypt(case.model_dump(mode="json"))
+        with self._pool.connection() as conn:
             conn.execute(
                 """
                 insert into disclosure_cases (id, finding_id, status, payload, created_at, updated_at)
@@ -217,19 +285,19 @@ class PostgresDisclosureRepository:
             )
 
     def get(self, case_id: str) -> DisclosureCase | None:
-        with psycopg.connect(self._database_url) as conn:
+        with self._pool.connection() as conn:
             row = conn.execute("select payload from disclosure_cases where id = %s", (case_id,)).fetchone()
         if row is None:
             return None
-        return DisclosureCase.model_validate(row[0])
+        return DisclosureCase.model_validate(self._cipher.decrypt(row[0]))
 
     def list_cases(self) -> list[DisclosureCase]:
-        with psycopg.connect(self._database_url) as conn:
+        with self._pool.connection() as conn:
             rows = conn.execute("select payload from disclosure_cases order by updated_at desc").fetchall()
-        return [DisclosureCase.model_validate(row[0]) for row in rows]
+        return [DisclosureCase.model_validate(self._cipher.decrypt(row[0])) for row in rows]
 
     def _ensure_schema(self) -> None:
-        with psycopg.connect(self._database_url) as conn:
+        with self._pool.connection() as conn:
             conn.execute(SCHEMA_PATH.read_text(encoding="utf-8"))
 
 

@@ -17,7 +17,24 @@ from wr3_api.api.routes import (
     telegram,
     tools,
 )
-from wr3_api.core.config import get_settings
+from wr3_api.core.config import Settings, get_settings
+from wr3_api.services.repository import close_all_pools
+
+_WILDCARD = {"*", ".*", ".+"}
+
+
+def _safe_cors(settings: Settings) -> tuple[list[str], str | None]:
+    """Build a credentialed-safe CORS allowlist.
+
+    ``allow_credentials=True`` with a wildcard origin is both rejected by browsers
+    and a real CSRF/exfiltration risk, so we strip any ``*`` origin (and wildcard
+    regex) rather than silently shipping an unsafe combination. Cross-origin
+    callers must be named explicitly.
+    """
+    base = [*settings.cors_origins, "http://localhost:3001", "http://127.0.0.1:3001"]
+    origins = [origin for origin in dict.fromkeys(base) if origin and origin not in _WILDCARD]
+    regex = settings.cors_origin_regex if settings.cors_origin_regex not in _WILDCARD else None
+    return origins, regex
 
 
 def create_app() -> FastAPI:
@@ -31,6 +48,7 @@ def create_app() -> FastAPI:
             yield
         finally:
             await monitoring.scout_autopilot.stop()
+            close_all_pools()
 
     app = FastAPI(
         title="wr3 API",
@@ -38,10 +56,11 @@ def create_app() -> FastAPI:
         description="API MVP для ИИ-предаудита и триажа рисков смарт-контрактов.",
         lifespan=lifespan,
     )
+    cors_origins, cors_regex = _safe_cors(settings)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins + ["http://localhost:3001", "http://127.0.0.1:3001"],
-        allow_origin_regex=settings.cors_origin_regex,
+        allow_origins=cors_origins,
+        allow_origin_regex=cors_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

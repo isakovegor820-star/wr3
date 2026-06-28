@@ -218,6 +218,9 @@ class AuditService:
         is_local_dashboard = self._settings.environment == "development"
         if not is_local_dashboard and (actor is None or not actor.is_reviewer):
             raise AuditAccessDenied("reviewer_access_required_for_audit_dashboard")
+        # Owner access tokens grant full audit access, so they are exposed only to
+        # an authenticated reviewer — never to an anonymous local-dashboard caller.
+        expose_owner_token = bool(actor and actor.is_reviewer)
 
         rows: list[dict[str, object]] = []
         for record in sorted(self._audit_repository.list_records(), key=lambda item: item.updated_at, reverse=True):
@@ -229,7 +232,7 @@ class AuditService:
             if severity and highest_severity != severity:
                 continue
             rows.append(
-                self._dashboard_row(record, highest_severity, is_local_dashboard)
+                self._dashboard_row(record, highest_severity, expose_owner_token)
             )
         return rows
 
@@ -237,13 +240,13 @@ class AuditService:
         self,
         record: AuditRecord,
         highest_severity: Severity | None,
-        is_local_dashboard: bool,
+        expose_owner_token: bool,
     ) -> dict[str, object]:
         primary = self._primary_finding(record)
         assessment = primary.disclosure_assessment if primary else None
         return {
             "audit_id": str(record.audit_id),
-            "owner_access_token": record.owner_access_token if is_local_dashboard else None,
+            "owner_access_token": record.owner_access_token if expose_owner_token else None,
             "chain": record.request.chain,
             "address": record.request.address,
             "state": record.state,
