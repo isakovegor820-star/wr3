@@ -1,5 +1,6 @@
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 
 from wr3_api.api.routes.audits import service
@@ -10,6 +11,16 @@ from wr3_api.services import target_discovery
 
 
 client = TestClient(create_app())
+
+
+@pytest.fixture(autouse=True)
+def _stub_immunefi_source(monkeypatch):
+    """Keep scout tests hermetic: never hit the live Immunefi feed. Tests that
+    exercise bounty targeting stub their own targets explicitly."""
+    async def _empty(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(target_discovery.TargetDiscoveryService, "discover_immunefi_targets", _empty)
 
 
 async def fake_discover(*args, **kwargs):

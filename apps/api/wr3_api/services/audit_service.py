@@ -612,7 +612,11 @@ class AuditService:
             severity=finding.severity if finding else None,
             location_label=assessment.location_label if assessment else None,
             confidence_reason=assessment.technical_explanation if assessment else None,
-            bounty_acceptance_reason=self._bounty_acceptance_reason(record, finding, case) if record and finding else None,
+            bounty_acceptance_reason=self._packet_bounty_reason(record, finding, case) if record and finding else None,
+            bounty_platform=record.request.bounty.platform if record and record.request.bounty else None,
+            bounty_program=record.request.bounty.program if record and record.request.bounty else None,
+            bounty_max_payout_usd=record.request.bounty.max_payout_usd if record and record.request.bounty else None,
+            bounty_submission_url=record.request.bounty.url if record and record.request.bounty else None,
             official_contact=case.project_contact,
             contact_source=case.contact_source,
             web_url=case.web_url,
@@ -668,6 +672,24 @@ class AuditService:
 
     def _bounty_acceptance_reason(self, record: AuditRecord, finding: Finding, case: DisclosureCase) -> str:
         return self._renderer._bounty_acceptance_reason(record, finding, case)
+
+    def _packet_bounty_reason(self, record: AuditRecord, finding: Finding, case: DisclosureCase) -> str:
+        """Prepend Immunefi program/payout/submission context to the generic
+        acceptance reason when the target is a known in-scope bounty asset."""
+        base = self._bounty_acceptance_reason(record, finding, case)
+        bounty = record.request.bounty
+        if bounty is None:
+            return base
+        payout = f"до ${int(bounty.max_payout_usd):,}" if bounty.max_payout_usd else "выплата по программе"
+        if self._is_confirmed_by_poc_or_fork(finding):
+            state = "подтверждён PoC/форком — можно готовить сабмит в программу"
+        else:
+            state = "ещё не подтверждён — нужен confirmed PoC/форк до сабмита"
+        note = (
+            f"В scope {bounty.platform} «{bounty.program}» ({payout}). "
+            f"Раскрытие только через {bounty.url or bounty.platform}. Статус: {state}."
+        )
+        return f"{note}\n\n{base}" if base else note
 
     def advance_disclosure_case(
         self,

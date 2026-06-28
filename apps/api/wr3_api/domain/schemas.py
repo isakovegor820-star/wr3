@@ -133,6 +133,18 @@ class SourceMetadata(BaseModel):
     proxy_info: ProxyInfo = Field(default_factory=ProxyInfo)
 
 
+class BountyContext(BaseModel):
+    """Bug-bounty scope a target belongs to (e.g. an Immunefi program). Carried
+    from scout discovery through the audit so a confirmed finding can be routed to
+    the right program with its payout ceiling and submission URL."""
+
+    platform: str = "immunefi"
+    program: str
+    url: str | None = None
+    max_payout_usd: float | None = None
+    asset_type: str | None = None
+
+
 class CreateAuditRequest(BaseModel):
     chain: Chain
     address: str | None = None
@@ -142,6 +154,7 @@ class CreateAuditRequest(BaseModel):
     visibility: Visibility = Visibility.PRIVATE
     user_intent: UserIntent = UserIntent.PRE_LAUNCH_SELF_CHECK
     tier: Tier = Tier.FREE
+    bounty: "BountyContext | None" = None
 
     @model_validator(mode="after")
     def require_address_or_source(self) -> "CreateAuditRequest":
@@ -184,6 +197,7 @@ class ScoutTarget(BaseModel):
     twitter_url: str | None = None
     security_txt_url: str | None = None
     security_email_guess: str | None = None
+    bounty: BountyContext | None = None
     contact_instructions: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
 
@@ -532,6 +546,10 @@ class DisclosurePacketResponse(BaseModel):
     location_label: str | None = None
     confidence_reason: str | None = None
     bounty_acceptance_reason: str | None = None
+    bounty_platform: str | None = None
+    bounty_program: str | None = None
+    bounty_max_payout_usd: float | None = None
+    bounty_submission_url: str | None = None
     official_contact: str | None = None
     contact_source: str | None = None
     web_url: str | None = None

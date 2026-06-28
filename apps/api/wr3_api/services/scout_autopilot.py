@@ -20,6 +20,19 @@ from wr3_api.services.dispatcher import dispatch_audit_processing_detached
 from wr3_api.services.target_discovery import TargetDiscoveryService
 
 
+def _merge_targets(primary: list[ScoutTarget], secondary: list[ScoutTarget]) -> list[ScoutTarget]:
+    """Merge two target lists, primary first, de-duplicated by (chain, address)."""
+    merged: list[ScoutTarget] = []
+    seen: set[tuple[object, str]] = set()
+    for target in [*primary, *secondary]:
+        key = (target.chain, target.address.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(target)
+    return merged
+
+
 class ScoutAutopilot:
     def __init__(
         self,
@@ -120,14 +133,22 @@ class ScoutAutopilot:
             self._last_run_at = utc_now()
             self._last_error = None
             try:
-                targets = await self._discovery.discover_all_supported_networks(
+                # Immunefi first: in-scope, paying bounty targets take priority over
+                # broad DeFiLlama discovery and are fork-PoC eligible.
+                bounty_targets = await self._discovery.discover_immunefi_targets(
+                    limit=self._settings.immunefi_max_targets_per_cycle,
+                    min_payout_usd=self._settings.immunefi_min_payout_usd,
+                    chains=request.chains,
+                )
+                defillama_targets = await self._discovery.discover_all_supported_networks(
                     per_chain_limit=request.per_chain_limit,
                     min_tvl_usd=request.min_tvl_usd,
                     chains=request.chains,
                 )
+                targets = _merge_targets(bounty_targets, defillama_targets)
                 audits, skipped_limitations = await self._queue_targets(targets, request)
                 result = ScoutRunResult(
-                    source="defillama_protocols",
+                    source="immunefi+defillama_protocols" if bounty_targets else "defillama_protocols",
                     discovered_count=len(targets),
                     queued_count=len(audits),
                     skipped_count=len(targets) - len(audits),
@@ -135,7 +156,8 @@ class ScoutAutopilot:
                     audits=audits,
                     limitations=[
                         "autopilot_all_supported_networks_cycle",
-                        "free_source_defillama_protocols_no_api_key",
+                        f"immunefi_bounty_targets:{len(bounty_targets)}",
+                        "free_sources_immunefi_and_defillama_no_api_key",
                         "passive_analysis_only",
                         "no_auto_support_messages",
                         "contacts_and_scope_require_manual_verification",
@@ -194,6 +216,7 @@ class ScoutAutopilot:
                 visibility=Visibility.PRIVATE,
                 user_intent=UserIntent.MONITORING,
                 tier=request.tier,
+                bounty=target.bounty,
             )
             record = await self._audit_service.create_audit(audit_request, actor)
             record.limitations.extend(
@@ -203,6 +226,11 @@ class ScoutAutopilot:
                     "autopilot_no_auto_disclosure",
                 ]
             )
+            if target.bounty is not None:
+                record.limitations.append(
+                    f"autopilot_immunefi_in_scope:{target.bounty.program}:"
+                    f"max_payout_usd={int(target.bounty.max_payout_usd or 0)}"
+                )
             self._audit_service.save_record(record)
             process_limitations: list[str] = []
             if record.state == AuditState.QUEUED and request.process_queued:

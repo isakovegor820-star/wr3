@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     solodit_api_key: str | None = None
     defillama_hacks_url: str = "https://api.llama.fi/hacks"
     defillama_protocols_url: str = "https://api.llama.fi/protocols"
+    # Immunefi bug-bounty scope ingestion (free public feed, no API key).
+    immunefi_bounties_url: str = "https://immunefi.com/public-api/bounties.json"
+    immunefi_enabled: bool = True
+    immunefi_min_payout_usd: float = 50_000
+    immunefi_max_targets_per_cycle: int = 8
+    immunefi_max_per_program: int = 3
     scout_default_interval_seconds: int = 900
     scout_autopilot_enabled: bool = False
     scout_autopilot_per_chain_limit: int = 3
