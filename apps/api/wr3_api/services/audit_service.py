@@ -1046,25 +1046,75 @@ class AuditService:
             return
         confirmed = [f for f in high if f.exploitability == Exploitability.CONFIRMED]
         top = (confirmed or high)[0]
-        lines = [f"{record.request.chain}:{record.request.address or 'source scan'}"]
+        is_confirmed = top.exploitability == Exploitability.CONFIRMED
+        is_critical = top.severity == Severity.CRITICAL
         bounty = record.request.bounty
+        short_id = str(record.audit_id)[:8]
+        if record.request.address:
+            where = f"{record.request.chain} · {record.request.address[:10]}…{record.request.address[-4:]}"
+        else:
+            where = f"{record.request.chain} · скан по коду"
+
+        if is_confirmed:
+            title = "🔴 wr3 нашёл КРИТИЧНЫЙ баг!" if is_critical else "🟠 wr3 нашёл серьёзный баг!"
+        else:
+            title = "🟡 wr3: кандидат на баг — нужна проверка"
+
+        lines: list[str] = []
         if bounty is not None:
-            payout = f" (до ${int(bounty.max_payout_usd):,})" if bounty.max_payout_usd else ""
-            lines.append(f"🎯 {bounty.platform}: {bounty.program}{payout}")
-        lines.append(f"[{top.severity}] {top.summary}")
-        lines.append(
-            "✅ подтверждён эксплойтом на форке" if top.exploitability == Exploitability.CONFIRMED
-            else "🟡 кандидат — нужна ручная проверка"
-        )
-        if confirmed:
-            lines.append(f"confirmed: {len(confirmed)}/{len(high)} high/critical")
-        lines.append(f"{self._settings.web_base_url}/audits/{record.audit_id}?owner_token={record.owner_access_token}")
-        title = f"🔔 wr3: {len(high)} high/critical на {record.request.chain}"
+            payout = f", награда до ${int(bounty.max_payout_usd):,}" if bounty.max_payout_usd else ""
+            lines.append(f"📍 Проект: {bounty.program} ({bounty.platform}{payout})")
+        lines.append(f"🌐 Где: {where}")
+        lines.append("")
+        lines.append("🐞 Что нашли:")
+        lines.append(self._plain_bug(top))
+        lines.append("")
+        if is_confirmed:
+            lines.append("✅ Проверено: робот написал атаку и выполнил её на копии контракта — баг настоящий.")
+        else:
+            lines.append("🟡 Кандидат: похоже на баг, но нужна ручная проверка перед отправкой.")
+        lines.append("")
+        if is_confirmed and bounty is not None and bounty.url:
+            lines.append("💰 Что делать:")
+            lines.append(f"1. Открой программу: {bounty.url}")
+            lines.append("2. Проверь, что контракт и тип бага в scope.")
+            lines.append(f"3. Скажи мне «собери отчёт {short_id}» — помогу оформить сабмит.")
+        elif is_confirmed:
+            lines.append("💰 Что делать:")
+            lines.append("1. Найди у проекта канал для багов (Security / Bug bounty на сайте).")
+            lines.append(f"2. Скажи мне «собери отчёт {short_id}» — помогу с безопасным черновиком.")
+        else:
+            lines.append(f"💡 Что делать: пока ничего не отправляй. Хочешь детальнее — скажи «проверь {short_id}».")
+        if len(high) > 1:
+            lines.append("")
+            lines.append(f"(+ ещё {len(high) - 1} находок high/critical в этом контракте)")
+        lines.append("")
+        lines.append(f"id: {short_id}")
         body = "\n".join(lines)
         try:
             await self._notifications.send_owner_alert(title=title, body=body)
         except Exception:
             record.limitations.append("owner_alert_delivery_failed")
+
+    def _plain_bug(self, finding: Finding) -> str:
+        """Plain-Russian, non-technical explanation of a finding for the owner alert."""
+        rules = [
+            ("reentr", "Повторный вход (reentrancy): во время вывода атакующий заходит в функцию ещё раз и сливает чужие средства из контракта."),
+            ("tx.origin", "Авторизация через tx.origin: владельца можно обмануть фишингом и выполнить действия от его имени."),
+            ("delegatecall", "Небезопасный delegatecall: атакующий может подменить логику и перехватить контракт."),
+            ("selfdestruct", "Контракт можно уничтожить постороннему и слить все его средства."),
+            ("suicidal", "Контракт можно уничтожить постороннему и слить все его средства."),
+            ("supply", "Нарушение учёта токенов: общий баланс можно раздуть — токены из воздуха."),
+            ("mint", "Токены можно выпустить без прав — инфляция баланса из воздуха."),
+            ("accounting", "Ошибка в учёте балансов: можно вывести больше, чем положено."),
+            ("ownership", "Захват владения: посторонний может стать владельцем контракта."),
+            ("access", "Нет защиты доступа: посторонний может выполнить действие владельца — забрать управление или средства."),
+        ]
+        haystack = f"{finding.taxonomy.wr3_category} {finding.summary}".lower()
+        for key, explanation in rules:
+            if key in haystack:
+                return explanation
+        return finding.summary
 
     def _annotate_findings_for_disclosure(self, record: AuditRecord) -> None:
         ai_fallback = any(
