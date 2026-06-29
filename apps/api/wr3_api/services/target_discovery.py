@@ -65,6 +65,7 @@ class TargetDiscoveryService:
         self,
         *,
         per_chain_limit: int = 3,
+        offset: int = 0,
         min_tvl_usd: float = 0,
         chains: list[Chain] | None = None,
     ) -> list[ScoutTarget]:
@@ -82,6 +83,7 @@ class TargetDiscoveryService:
             for target in normalize_defillama_protocols(
                 payload,
                 limit=per_chain_limit,
+                offset=offset,
                 min_tvl_usd=min_tvl_usd,
                 chains=[chain],
             ):
@@ -96,6 +98,7 @@ class TargetDiscoveryService:
         self,
         *,
         limit: int | None = None,
+        offset: int = 0,
         min_payout_usd: float = 0.0,
         chains: list[Chain] | None = None,
     ) -> list[ScoutTarget]:
@@ -115,6 +118,7 @@ class TargetDiscoveryService:
                 payload,
                 min_payout_usd=min_payout_usd,
                 limit=limit,
+                offset=offset,
                 max_per_program=self._settings.immunefi_max_per_program,
             )
         except (httpx.HTTPError, ValueError, TypeError):
@@ -129,10 +133,11 @@ def normalize_defillama_protocols(
     payload: list[Any],
     *,
     limit: int = 10,
+    offset: int = 0,
     min_tvl_usd: float = 0,
     chains: list[Chain] | None = None,
 ) -> list[ScoutTarget]:
-    selected: list[ScoutTarget] = []
+    matched: list[ScoutTarget] = []
     allowed = set(chains or [])
     sorted_payload = sorted(
         [item for item in payload if isinstance(item, dict)],
@@ -140,8 +145,6 @@ def normalize_defillama_protocols(
         reverse=True,
     )
     for raw in sorted_payload:
-        if len(selected) >= limit:
-            break
         tvl = _float_or_none(raw.get("tvl"))
         if tvl is not None and tvl < min_tvl_usd:
             continue
@@ -152,8 +155,13 @@ def normalize_defillama_protocols(
             continue
         if allowed and target.chain not in allowed:
             continue
-        selected.append(target)
-    return selected
+        matched.append(target)
+    # Rotate by offset so successive cycles page deeper into the TVL list instead
+    # of re-scanning the same top protocols every time.
+    if matched and offset:
+        start = offset % len(matched)
+        matched = matched[start:] + matched[:start]
+    return matched[:limit]
 
 
 def target_from_defillama_protocol(

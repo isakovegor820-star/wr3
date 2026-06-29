@@ -120,7 +120,7 @@ def test_navy_route_enables_gpt_55_with_key(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_navy_chat_completions_uses_gpt_55_json_mode_and_auth(monkeypatch):
+async def test_navy_chat_completions_uses_gpt_55_minimal_body_and_auth(monkeypatch):
     monkeypatch.setenv("WR3_LLM_PROVIDER", "navy")
     monkeypatch.setenv("WR3_LLM_MODEL", "gpt-5.5")
     monkeypatch.setenv("WR3_NAVY_API_KEY", "test-key")
@@ -134,7 +134,9 @@ async def test_navy_chat_completions_uses_gpt_55_json_mode_and_auth(monkeypatch)
         assert request.url.path == "/v1/chat/completions"
         assert request.headers["authorization"].startswith("Bearer ")
         assert body["model"] == "gpt-5.5"
-        assert body["response_format"] == {"type": "json_object"}
+        # navy rejects response_format/temperature ("expects json_schema") with a
+        # 400, so the navy request body must stay minimal: model + messages only.
+        assert "response_format" not in body
         assert "temperature" not in body
         return httpx.Response(
             200,
