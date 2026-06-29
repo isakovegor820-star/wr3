@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from wr3_api.domain.schemas import AuditRecord, DisclosureCase, Finding
 
 DISCLAIMER = (
@@ -271,18 +273,21 @@ class ReportRenderer:
         markdown = self.render_markdown(record)
         paragraphs = []
         for line in markdown.splitlines():
+            # Escape every interpolated segment: the markdown embeds attacker-
+            # controlled text (contract address, LLM-derived finding summaries from
+            # untrusted source) — without escaping this is stored XSS in the report.
             if line.startswith("# "):
-                paragraphs.append(f"<h1>{line[2:]}</h1>")
+                paragraphs.append(f"<h1>{html.escape(line[2:])}</h1>")
             elif line.startswith("## "):
-                paragraphs.append(f"<h2>{line[3:]}</h2>")
+                paragraphs.append(f"<h2>{html.escape(line[3:])}</h2>")
             elif line.startswith("### "):
-                paragraphs.append(f"<h3>{line[4:]}</h3>")
+                paragraphs.append(f"<h3>{html.escape(line[4:])}</h3>")
             elif line.startswith("- "):
-                paragraphs.append(f"<p>{line}</p>")
+                paragraphs.append(f"<p>{html.escape(line)}</p>")
             elif line.startswith("> "):
-                paragraphs.append(f"<blockquote>{line[2:]}</blockquote>")
+                paragraphs.append(f"<blockquote>{html.escape(line[2:])}</blockquote>")
             elif line:
-                paragraphs.append(f"<p>{line}</p>")
+                paragraphs.append(f"<p>{html.escape(line)}</p>")
         return "<!doctype html><html><body>" + "\n".join(paragraphs) + "</body></html>"
 
     def render_internal_disclosure_markdown(

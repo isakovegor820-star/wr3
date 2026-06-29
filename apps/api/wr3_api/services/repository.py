@@ -56,7 +56,14 @@ class _PayloadCipher:
     here). Reuses the platform artifact key; without a key configured it stays
     plaintext for local dev and flags the gap to the caller."""
 
-    def __init__(self, key: str | None) -> None:
+    def __init__(self, key: str | None, *, require: bool = False) -> None:
+        # Fail closed: outside development a missing/typo'd key must not silently
+        # fall back to writing contract source + findings in plaintext at rest.
+        if require and not key:
+            raise RuntimeError(
+                "WR3_ARTIFACT_ENCRYPTION_KEY is required outside development — "
+                "refusing to persist contract source/findings unencrypted."
+            )
         self._key = key
 
     @property
@@ -154,7 +161,10 @@ class PostgresAuditRepository:
             raise RuntimeError("psycopg is required when WR3_DATABASE_URL is configured")
         self._database_url = database_url
         self._pool = _get_pool(database_url)
-        self._cipher = _PayloadCipher(get_settings().artifact_encryption_key)
+        self._cipher = _PayloadCipher(
+            get_settings().artifact_encryption_key,
+            require=get_settings().environment != "development",
+        )
         self._ensure_schema()
 
     def save(self, record: AuditRecord) -> None:
@@ -312,7 +322,10 @@ class PostgresDisclosureRepository:
             raise RuntimeError("psycopg is required when WR3_DATABASE_URL is configured")
         self._database_url = database_url
         self._pool = _get_pool(database_url)
-        self._cipher = _PayloadCipher(get_settings().artifact_encryption_key)
+        self._cipher = _PayloadCipher(
+            get_settings().artifact_encryption_key,
+            require=get_settings().environment != "development",
+        )
         self._ensure_schema()
 
     def save(self, case: DisclosureCase) -> None:
