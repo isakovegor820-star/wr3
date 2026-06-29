@@ -38,14 +38,26 @@ _SENSITIVE_ENV_MARKERS = (
     "SECRET",
     "PASSWORD",
     "PASSWD",
+    "PASSPHRASE",
     "CREDENTIAL",
+    "PRIVATE",
     "_URL",
+    "URI",
     "DSN",
+    "BACKEND",
+    "SIGNING",
 )
 
 
 def _is_sensitive_env_name(name: str) -> bool:
     upper = name.upper()
+    # Strip the app's entire WR3_ config namespace wholesale — engine subprocesses
+    # never need it, and it carries keys, broker/result-backend + object-store URLs,
+    # and the artifact encryption key. Generic third-party secrets (AWS_*, REDIS_*,
+    # *_PASSPHRASE, *_URI, …) are caught by the substring markers. Over-stripping is
+    # safe: the engines only need PATH/HOME-style vars, none of which match.
+    if upper.startswith("WR3_"):
+        return True
     return any(marker in upper for marker in _SENSITIVE_ENV_MARKERS)
 
 

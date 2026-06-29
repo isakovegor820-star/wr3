@@ -65,8 +65,15 @@ async def telegram_webhook(
     secret_ok = bool(settings.telegram_webhook_secret) and (
         x_telegram_bot_api_secret_token == settings.telegram_webhook_secret
     )
-    if settings.telegram_webhook_secret and not secret_ok and not is_local_emulator:
-        raise HTTPException(status_code=403, detail="telegram_webhook_secret_mismatch")
+    # Fail closed: outside development a matching webhook secret is mandatory — an
+    # UNSET secret must not silently disable auth (otherwise anyone can drive
+    # disclosure actions by spoofing from.id). In development we stay lenient so the
+    # emulator/local testing keeps working without configuring a secret.
+    if not secret_ok and not is_local_emulator:
+        if settings.environment != "development":
+            raise HTTPException(status_code=403, detail="telegram_webhook_secret_required")
+        if settings.telegram_webhook_secret:
+            raise HTTPException(status_code=403, detail="telegram_webhook_secret_mismatch")
     delivery_enabled = bool(settings.telegram_bot_token) and not is_local_emulator and (
         not settings.telegram_webhook_secret or secret_ok
     )
