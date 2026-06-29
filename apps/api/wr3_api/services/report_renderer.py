@@ -9,6 +9,27 @@ DISCLAIMER = (
     "ручное ревью и не гарантирует, что контракт безопасен."
 )
 
+_REPORT_CSS = (
+    "*{box-sizing:border-box}"
+    "body{margin:0;background:#f4f5f7;color:#1a1d24;"
+    "font:15px/1.65 -apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}"
+    ".report{max-width:820px;margin:28px auto;background:#fff;padding:48px 56px;"
+    "border-radius:10px;box-shadow:0 1px 5px rgba(20,22,30,.08)}"
+    ".brand{font-size:12px;letter-spacing:.14em;text-transform:uppercase;"
+    "color:#6b46ff;font-weight:700;margin-bottom:14px}"
+    "h1{font-size:25px;line-height:1.25;margin:.1em 0 .7em}"
+    "h2{font-size:18px;margin:1.7em 0 .5em;padding-bottom:.32em;border-bottom:1px solid #ecedf2}"
+    "h3{font-size:15.5px;margin:1.2em 0 .35em}"
+    "p{margin:.5em 0}ul{margin:.4em 0 .9em;padding-left:1.25em}li{margin:.28em 0}"
+    "blockquote{margin:1.1em 0;padding:12px 16px;background:#faf9ff;"
+    "border-left:3px solid #6b46ff;color:#444;font-size:13.5px;border-radius:0 6px 6px 0}"
+    "code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;"
+    "background:#f1f2f7;padding:1px 5px;border-radius:4px}"
+    "footer{max-width:820px;margin:0 auto 44px;padding:4px 56px;color:#8a909c;font-size:12px;text-align:center}"
+    "@media print{body{background:#fff}.report{box-shadow:none;margin:0;border-radius:0;max-width:none;padding:18px 6px}"
+    "footer{margin:14px 0 0}}"
+)
+
 STATE_LABELS = {
     "created": "создан",
     "queued": "в очереди",
@@ -270,25 +291,50 @@ class ReportRenderer:
         return sorted(record.findings, key=lambda item: (severity_rank[str(item.severity)], -item.confidence))[0]
 
     def render_html(self, record: AuditRecord) -> str:
-        markdown = self.render_markdown(record)
-        paragraphs = []
+        # A clean, print-to-PDF-ready document — this is the artifact handed to a
+        # paying client, so it needs to look like a deliverable, not raw markup.
+        body = self._markdown_to_html(self.render_markdown(record))
+        return (
+            "<!doctype html><html lang='ru'><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>wr3 · отчёт предаудита</title>"
+            f"<style>{_REPORT_CSS}</style></head><body>"
+            "<main class='report'><div class='brand'>wr3 · AI-предаудит</div>"
+            f"{body}</main>"
+            "<footer>Сгенерировано wr3 — ИИ-ассистированный предаудит. "
+            "Не заменяет ручной аудит и не гарантирует, что контракт безопасен.</footer>"
+            "</body></html>"
+        )
+
+    def _markdown_to_html(self, markdown: str) -> str:
+        # Escape every interpolated segment: the markdown embeds attacker-controlled
+        # text (address, LLM-derived finding summaries from untrusted source) — without
+        # escaping this is stored XSS in the report.
+        out: list[str] = []
+        in_list = False
         for line in markdown.splitlines():
-            # Escape every interpolated segment: the markdown embeds attacker-
-            # controlled text (contract address, LLM-derived finding summaries from
-            # untrusted source) — without escaping this is stored XSS in the report.
+            if line.startswith("- "):
+                if not in_list:
+                    out.append("<ul>")
+                    in_list = True
+                out.append(f"<li>{html.escape(line[2:])}</li>")
+                continue
+            if in_list:
+                out.append("</ul>")
+                in_list = False
             if line.startswith("# "):
-                paragraphs.append(f"<h1>{html.escape(line[2:])}</h1>")
+                out.append(f"<h1>{html.escape(line[2:])}</h1>")
             elif line.startswith("## "):
-                paragraphs.append(f"<h2>{html.escape(line[3:])}</h2>")
+                out.append(f"<h2>{html.escape(line[3:])}</h2>")
             elif line.startswith("### "):
-                paragraphs.append(f"<h3>{html.escape(line[4:])}</h3>")
-            elif line.startswith("- "):
-                paragraphs.append(f"<p>{html.escape(line)}</p>")
+                out.append(f"<h3>{html.escape(line[4:])}</h3>")
             elif line.startswith("> "):
-                paragraphs.append(f"<blockquote>{html.escape(line[2:])}</blockquote>")
-            elif line:
-                paragraphs.append(f"<p>{html.escape(line)}</p>")
-        return "<!doctype html><html><body>" + "\n".join(paragraphs) + "</body></html>"
+                out.append(f"<blockquote>{html.escape(line[2:])}</blockquote>")
+            elif line.strip():
+                out.append(f"<p>{html.escape(line)}</p>")
+        if in_list:
+            out.append("</ul>")
+        return "".join(out)
 
     def render_internal_disclosure_markdown(
         self,
