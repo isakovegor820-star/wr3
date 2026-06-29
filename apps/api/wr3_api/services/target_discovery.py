@@ -70,12 +70,15 @@ class TargetDiscoveryService:
         chains: list[Chain] | None = None,
     ) -> list[ScoutTarget]:
         selected_chains = chains or list(CHAIN_PRIORITY)
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get(self._settings.defillama_protocols_url)
-            response.raise_for_status()
-        payload = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(self._settings.defillama_protocols_url)
+                response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError, TypeError):
+            return []  # a DeFiLlama outage / malformed body must not break the cycle
         if not isinstance(payload, list):
-            raise ValueError("defillama_protocols_list_required")
+            return []
 
         targets: list[ScoutTarget] = []
         seen: set[tuple[Chain, str]] = set()
@@ -141,7 +144,9 @@ def normalize_defillama_protocols(
     allowed = set(chains or [])
     sorted_payload = sorted(
         [item for item in payload if isinstance(item, dict)],
-        key=lambda item: float(item.get("tvl") or 0),
+        # _float_or_none, not float(): a non-numeric tvl in the untrusted feed
+        # (e.g. "N/A") must not raise and abort the whole discovery cycle.
+        key=lambda item: _float_or_none(item.get("tvl")) or 0.0,
         reverse=True,
     )
     for raw in sorted_payload:
