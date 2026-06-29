@@ -122,7 +122,8 @@ def normalize_immunefi_bounties(
             max_payout_usd=max_payout,
             asset_type="smart_contract",
         )
-        program_count = 0
+        program_keys = set()
+        eligible = []
         for asset in bounty.get("assets") or []:
             if not isinstance(asset, dict) or asset.get("type") != "smart_contract":
                 continue
@@ -131,13 +132,21 @@ def normalize_immunefi_bounties(
                 continue
             chain, address = parsed
             key = (chain, address.lower())
-            if key in seen:
+            if key in seen or key in program_keys:
                 continue
-            seen.add(key)
+            program_keys.add(key)
+            eligible.append((chain, address))
+        # Rotate THIS program's assets by offset BEFORE the per-program cap, so
+        # successive cycles cover different contracts of a big program instead of
+        # always the first max_per_program (which left the rest unreachable).
+        if offset and eligible:
+            start = offset % len(eligible)
+            eligible = eligible[start:] + eligible[:start]
+        if max_per_program is not None:
+            eligible = eligible[:max_per_program]
+        for chain, address in eligible:
+            seen.add((chain, address.lower()))
             targets.append(_target_for(chain, address, program, slug, context))
-            program_count += 1
-            if max_per_program is not None and program_count >= max_per_program:
-                break
     # Rotate by offset so successive scout cycles page through the WHOLE scope
     # instead of re-scanning the same top-payout targets every time.
     if targets and offset:
