@@ -30,15 +30,81 @@ def _get_provider_semaphore() -> asyncio.Semaphore:
 
 
 # --- Daily LLM call budget + kill switch (cost control for autonomous runs) ---
+# Backed by Postgres when a database is configured so the cap SURVIVES restarts:
+# an in-memory counter resets on every process restart, silently letting real spend
+# blow past the cap (and your provider credits). Falls back to in-memory for
+# dev/tests with no database.
 _llm_calls_today = 0
 _llm_calls_date: str | None = None
+_budget_table_ready = False
 
 
 def _today() -> str:
     return utc_now().date().isoformat()
 
 
+def _budget_pool():
+    """Shared connection pool, or None when no database is configured."""
+    database_url = get_settings().database_url
+    if not database_url:
+        return None
+    from wr3_api.services.repository import _get_pool  # lazy: avoid an import cycle
+
+    return _get_pool(database_url)
+
+
+def _ensure_budget_table(pool) -> None:
+    global _budget_table_ready
+    if _budget_table_ready:
+        return
+    with pool.connection() as conn:
+        conn.execute(
+            "create table if not exists llm_budget (day date primary key, calls integer not null default 0)"
+        )
+    _budget_table_ready = True
+
+
+def _db_budget_used(pool) -> int:
+    _ensure_budget_table(pool)
+    with pool.connection() as conn:
+        row = conn.execute("select calls from llm_budget where day = %s", (_today(),)).fetchone()
+    return int((row or [0])[0])
+
+
+def _db_budget_consume(pool, cap: int | None) -> bool:
+    _ensure_budget_table(pool)
+    with pool.connection() as conn:
+        if cap:
+            # Atomic check-and-increment: the conditional ON CONFLICT only bumps the
+            # counter while still under the cap, so concurrent workers/processes can
+            # never collectively exceed it (no row returned == cap reached).
+            row = conn.execute(
+                """
+                insert into llm_budget (day, calls) values (%s, 1)
+                on conflict (day) do update set calls = llm_budget.calls + 1
+                    where llm_budget.calls < %s
+                returning calls
+                """,
+                (_today(), cap),
+            ).fetchone()
+            return row is not None
+        conn.execute(
+            """
+            insert into llm_budget (day, calls) values (%s, 1)
+            on conflict (day) do update set calls = llm_budget.calls + 1
+            """,
+            (_today(),),
+        )
+    return True
+
+
 def _llm_budget_used() -> int:
+    pool = _budget_pool()
+    if pool is not None:
+        try:
+            return _db_budget_used(pool)
+        except Exception:
+            pass  # DB hiccup: fall back to the in-memory view
     return _llm_calls_today if _llm_calls_date == _today() else 0
 
 
@@ -50,15 +116,32 @@ def _llm_budget_exhausted() -> bool:
 def _llm_budget_consume() -> bool:
     """Count one provider call against the daily cap. Returns False when the cap is
     already reached, so the caller falls back to deterministic triage."""
+    cap = get_settings().llm_max_calls_per_day
+    pool = _budget_pool()
+    if pool is not None:
+        try:
+            return _db_budget_consume(pool, cap)
+        except Exception:
+            pass  # DB hiccup: degrade to in-memory rather than block triage
     global _llm_calls_today, _llm_calls_date
     today = _today()
     if _llm_calls_date != today:
         _llm_calls_date = today
         _llm_calls_today = 0
-    cap = get_settings().llm_max_calls_per_day
     if cap and _llm_calls_today >= cap:
         return False
     _llm_calls_today += 1
+    return True
+
+
+def worth_llm_triage(record: AuditRecord) -> bool:
+    """Spend the LLM only where it can add signal: skip clean scans (no findings to
+    reason about) and bytecode-only scans (heuristic noise, no real source). Keeps
+    the daily budget for source-mode scans that actually surfaced something."""
+    if not record.findings:
+        return False
+    if any("bytecode_only" in limitation for limitation in record.limitations):
+        return False
     return True
 
 

@@ -44,7 +44,7 @@ from wr3_api.services.auth import AuditAccessContext, AuthContext
 from wr3_api.services.contracts import build_source_metadata
 from wr3_api.services.explorers import ExplorerSourcePuller, default_explorer_pullers
 from wr3_api.services.fuzzing import FuzzingWorker, FuzzWorkerResult
-from wr3_api.services.llm_triage import LlmTriageRouter
+from wr3_api.services.llm_triage import LlmTriageRoute, LlmTriageRouter, worth_llm_triage
 from wr3_api.services.notifications import NotificationService
 from wr3_api.services.poc import (
     FoundryPocWorker,
@@ -905,6 +905,16 @@ class AuditService:
 
         self._transition(record, AuditState.TRIAGE_RUNNING, reason="triage_started")
         route = self._llm_triage.route(record)
+        # Conserve the LLM budget: don't spend a provider call on a clean or
+        # bytecode-only scan where it can't add signal — fall back to deterministic.
+        if route.enabled and not worth_llm_triage(record):
+            route = LlmTriageRoute(
+                provider=route.provider,
+                model=route.model,
+                enabled=False,
+                zdr_required=route.zdr_required,
+                limitations=[*route.limitations, "llm_skipped_low_value_scan_using_deterministic_fallback"],
+            )
         prompt_preview = self._llm_triage.build_prompt_preview(record, source_text)
         triage_result = await self._llm_triage.triage(
             record,
