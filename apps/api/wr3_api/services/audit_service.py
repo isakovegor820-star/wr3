@@ -186,6 +186,11 @@ class AuditService:
     def save_record(self, record: AuditRecord) -> None:
         self._audit_repository.save(record)
 
+    def list_queued_audit_ids(self, *, limit: int) -> list[UUID]:
+        """Oldest-first ids of audits still QUEUED — lets the autopilot drain the
+        standing queue (targets queued by earlier cycles that never got processed)."""
+        return [record.audit_id for record in self._audit_repository.list_queued_records(limit)]
+
     def find_record_by_id_prefix(self, prefix: str) -> AuditRecord | None:
         """Look up an audit by the short 8-char id shown in alerts (used by the bot)."""
         prefix = prefix.lower()

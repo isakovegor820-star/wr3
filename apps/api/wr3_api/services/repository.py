@@ -6,6 +6,7 @@ from typing import Any, Protocol
 from uuid import UUID, uuid4
 
 from wr3_api.core.config import get_settings
+from wr3_api.domain.enums import AuditState
 from wr3_api.domain.schemas import AuditRecord, DisclosureCase
 
 try:  # Optional at import time so local memory-only tests do not need Postgres.
@@ -88,6 +89,8 @@ class AuditRepository(Protocol):
 
     def list_records(self) -> list[AuditRecord]: ...
 
+    def list_queued_records(self, limit: int) -> list[AuditRecord]: ...
+
     def delete(self, audit_id: UUID) -> bool: ...
 
 
@@ -111,6 +114,11 @@ class InMemoryAuditRepository:
 
     def list_records(self) -> list[AuditRecord]:
         return list(self._records.values())
+
+    def list_queued_records(self, limit: int) -> list[AuditRecord]:
+        queued = [r for r in self._records.values() if r.state == AuditState.QUEUED]
+        queued.sort(key=lambda r: r.created_at)
+        return queued[: max(limit, 0)]
 
     def delete(self, audit_id: UUID) -> bool:
         return self._records.pop(audit_id, None) is not None
@@ -191,6 +199,16 @@ class PostgresAuditRepository:
     def list_records(self) -> list[AuditRecord]:
         with self._pool.connection() as conn:
             rows = conn.execute("select payload from audit_jobs order by updated_at asc").fetchall()
+        return [AuditRecord.model_validate(self._cipher.decrypt(row[0])) for row in rows]
+
+    def list_queued_records(self, limit: int) -> list[AuditRecord]:
+        # Filter on the indexed state column so we only decrypt the few oldest
+        # queued payloads, not the whole table, every drain cycle.
+        with self._pool.connection() as conn:
+            rows = conn.execute(
+                "select payload from audit_jobs where state = %s order by created_at asc limit %s",
+                (str(AuditState.QUEUED), max(limit, 0)),
+            ).fetchall()
         return [AuditRecord.model_validate(self._cipher.decrypt(row[0])) for row in rows]
 
     def delete(self, audit_id: UUID) -> bool:
