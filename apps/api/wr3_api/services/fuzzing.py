@@ -349,10 +349,34 @@ contract Wr3Invariants {{
 _CTOR_DEFAULTS = {"uint": "1000000 ether", "address": "address(this)", "bool": "true"}
 
 
-def _simple_constructor_args(source: str) -> str | None:
+def _contract_body(source: str, name: str) -> str:
+    """Brace-balanced body of ``contract <name>``, or the whole source if absent."""
+    match = re.search(r"\bcontract\s+" + re.escape(name) + r"\b", source)
+    if not match:
+        return source
+    brace = source.find("{", match.end())
+    if brace == -1:
+        return source
+    depth = 0
+    for i in range(brace, len(source)):
+        if source[i] == "{":
+            depth += 1
+        elif source[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[brace : i + 1]
+    return source[brace:]
+
+
+def _simple_constructor_args(source: str, target_name: str | None = None) -> str | None:
     """Build a default constructor-arg string for a token, or None if the
-    constructor needs a type we cannot synthesise (string/bytes/struct)."""
-    match = re.search(r"\bconstructor\s*\(([^)]*)\)", source)
+    constructor needs a type we cannot synthesise (string/bytes/struct).
+
+    Scoped to the target contract's body: a helper/base/library contract with its
+    own constructor declared earlier in a multi-contract file must not be mistaken
+    for the token's (that emitted wrong args and broke the whole campaign)."""
+    scope = _contract_body(source, target_name) if target_name else source
+    match = re.search(r"\bconstructor\s*\(([^)]*)\)", scope)
     if not match or not match.group(1).strip():
         return ""
     args: list[str] = []
@@ -384,7 +408,7 @@ def _build_erc20_supply_harness(source: str, target_name: str) -> str | None:
         return None
     if "totalsupply" not in lowered or "function transfer" not in lowered:
         return None
-    ctor_args = _simple_constructor_args(source)
+    ctor_args = _simple_constructor_args(source, target_name)
     if ctor_args is None:
         return None
     return f"""// SPDX-License-Identifier: UNLICENSED
