@@ -58,6 +58,9 @@ class ScoutAutopilot:
         self._defillama_offset = 0
         self._inflight: set = set()  # audit_ids currently scheduled for processing
         self._drained_total = 0
+        self._process_semaphore = asyncio.Semaphore(
+            max(1, self._settings.scout_autopilot_max_concurrent_audits)
+        )
         self._restart_count = 0
         self._consecutive_failures = 0
         self._stall_alerted = False
@@ -365,13 +368,19 @@ class ScoutAutopilot:
             )
         return audits, skipped_limitations
 
+    async def _bounded_process(self, audit_id) -> None:
+        # Gate in-process audits so a backlog can't spawn an unbounded forge/medusa
+        # subprocess storm that thrashes the host (and trips the watchdog).
+        async with self._process_semaphore:
+            await self._audit_service.process_audit(audit_id)
+
     def _schedule_processing(self, audit_id) -> None:
         # Route through the dispatcher: Celery (durable, survives an API restart)
         # when WR3_TASK_BACKEND=celery, otherwise an in-process asyncio task.
         self._inflight.add(audit_id)
         _limitations, task = dispatch_audit_processing_detached(
             audit_id=audit_id,
-            local_processor=self._audit_service.process_audit,
+            local_processor=self._bounded_process,
         )
         if task is not None:
             self._processing_tasks.add(task)

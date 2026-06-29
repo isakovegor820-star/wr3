@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # Each cycle also drains up to N audits left QUEUED by earlier cycles (or manual
     # runs) so the standing queue never sits unprocessed. 0 disables draining.
     scout_autopilot_drain_limit: int = 8
+    # Cap how many audits compile/run forge/medusa concurrently in the in-process
+    # backend, so a backlog can't spawn an unbounded subprocess storm.
+    scout_autopilot_max_concurrent_audits: int = 4
     # 24/7 self-healing: a watchdog restarts a dead loop and alerts on a stall.
     scout_watchdog_interval_seconds: int = 60
     scout_heartbeat_stall_factor: int = 3  # stalled if no heartbeat for factor*interval (+grace)

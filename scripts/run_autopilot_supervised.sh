@@ -57,6 +57,7 @@ while true; do
   # If it ran for a healthy while, reset backoff; otherwise grow it (crash loop guard).
   if [ "$((end - start))" -ge 120 ]; then backoff=2; else backoff=$(( backoff * 2 )); fi
   [ "$backoff" -gt "$max_backoff" ] && backoff=$max_backoff
-  i=0
-  while [ "$i" -lt "$backoff" ]; do i=$((i + 1)); read -r -t 1 _ </dev/null 2>/dev/null || true; done
+  # A real delay between restarts. (`read -t N </dev/null` returns instantly on
+  # EOF, so the old loop was a busy-spin, not a backoff.)
+  sleep "$backoff"
 done

@@ -810,6 +810,14 @@ class AuditService:
         )
 
     async def _process_record(self, record: AuditRecord) -> None:
+        # Start each pass from a clean run-scoped slate so a retry
+        # (FAILED/PARTIAL -> RETRYING -> QUEUED -> here) doesn't duplicate findings,
+        # engine runs, or double-count scoring penalties from the prior attempt.
+        # On a first run these are already empty, so this is a no-op.
+        record.findings = []
+        record.engine_runs = []
+        record.failed_stages = []
+        record.limitations = list(dict.fromkeys(record.limitations))
         if not record.request.source:
             self._transition(record, AuditState.INGESTING, reason="ingestion_started")
             pulled = await self._pull_verified_source(record)
