@@ -333,10 +333,12 @@ class LlmTriageRouter:
             ],
             "max_tokens": settings.llm_max_tokens,
         }
-        if provider == "navy":
-            request_body["response_format"] = {"type": "json_object"}
-        else:
+        if provider == "openrouter":
             request_body["temperature"] = 0
+        # navy proxies Anthropic models that reject response_format=json_object
+        # (it expects json_schema) and can reject temperature too — so we send the
+        # minimal OpenAI-compatible body. The "strict JSON only" system instruction
+        # plus _parse_json_object (which unwraps ```json fences) enforce structure.
         if provider_payload is not None:
             request_body["provider"] = provider_payload
         headers = {
