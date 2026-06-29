@@ -121,9 +121,22 @@ class TelegramCommandBot:
         if self._scout is None:
             return "Статус автопилота недоступен."
         s = self._scout.status()
-        health = "🟢 здоров" if s.healthy else "🔴 проблема"
-        return (
-            f"🛰 Автопилот: {'работает' if s.running else 'выключен'} · {health}\n"
-            f"циклов: {s.cycle_count} · поставлено: {s.queued_total} · перезапусков: {s.restart_count}\n"
-            f"последняя ошибка: {s.last_error or 'нет'}"
-        )
+        if s.running and s.healthy:
+            verdict = "✅ ПЛАТФОРМА РАБОТАЕТ\nОхотится прямо сейчас 🛰"
+        elif s.running:
+            verdict = "🟡 РАБОТАЕТ ЧАСТИЧНО\nАвтопилот запущен, но нездоров"
+        else:
+            verdict = "🔴 АВТОПИЛОТ ВЫКЛЮЧЕН"
+        lines = [verdict, ""]
+        try:  # live-цифры best-effort — не ломаем статус из-за сбоя БД
+            c = self._audit.platform_counts()
+            lines.append(f"🎯 Подтверждённых эксплойтов: {c['confirmed']}")
+            lines.append(f"📊 Проверено контрактов: {c['completed']}")
+            lines.append(f"⏳ В очереди на проверку: {c['queued']}")
+            lines.append("")
+        except Exception:
+            pass
+        lines.append(f"🛰 Автопилот: цикл #{s.cycle_count} · разобрано из очереди {s.drained_total}")
+        if s.last_error:
+            lines.append(f"⚠️ Последняя ошибка: {s.last_error}")
+        return "\n".join(lines)

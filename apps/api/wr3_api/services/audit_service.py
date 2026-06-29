@@ -191,6 +191,10 @@ class AuditService:
         standing queue (targets queued by earlier cycles that never got processed)."""
         return [record.audit_id for record in self._audit_repository.list_queued_records(limit)]
 
+    def platform_counts(self) -> dict[str, int]:
+        """Queued / completed / confirmed-exploit totals — for the Telegram status."""
+        return self._audit_repository.platform_counts()
+
     def find_record_by_id_prefix(self, prefix: str) -> AuditRecord | None:
         """Look up an audit by the short 8-char id shown in alerts (used by the bot)."""
         prefix = prefix.lower()
