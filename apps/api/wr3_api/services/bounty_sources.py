@@ -85,6 +85,7 @@ def normalize_immunefi_bounties(
     *,
     min_payout_usd: float = 0.0,
     limit: int | None = None,
+    offset: int = 0,
     max_per_program: int | None = None,
 ) -> list[ScoutTarget]:
     """Flatten the Immunefi bounties feed into ScoutTargets, highest payout first.
@@ -135,8 +136,11 @@ def normalize_immunefi_bounties(
             seen.add(key)
             targets.append(_target_for(chain, address, program, slug, context))
             program_count += 1
-            if limit is not None and len(targets) >= limit:
-                return targets
             if max_per_program is not None and program_count >= max_per_program:
                 break
-    return targets
+    # Rotate by offset so successive scout cycles page through the WHOLE scope
+    # instead of re-scanning the same top-payout targets every time.
+    if targets and offset:
+        start = offset % len(targets)
+        targets = targets[start:] + targets[:start]
+    return targets[:limit] if limit is not None else targets

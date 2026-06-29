@@ -54,6 +54,8 @@ class ScoutAutopilot:
         self._run_lock = asyncio.Lock()
         self._cycle_count = 0
         self._queued_total = 0
+        self._immunefi_offset = 0
+        self._defillama_offset = 0
         self._restart_count = 0
         self._consecutive_failures = 0
         self._stall_alerted = False
@@ -235,14 +237,20 @@ class ScoutAutopilot:
                 # broad DeFiLlama discovery and are fork-PoC eligible.
                 bounty_targets = await self._discovery.discover_immunefi_targets(
                     limit=self._settings.immunefi_max_targets_per_cycle,
+                    offset=self._immunefi_offset,
                     min_payout_usd=self._settings.immunefi_min_payout_usd,
                     chains=request.chains,
                 )
                 defillama_targets = await self._discovery.discover_all_supported_networks(
                     per_chain_limit=request.per_chain_limit,
+                    offset=self._defillama_offset,
                     min_tvl_usd=request.min_tvl_usd,
                     chains=request.chains,
                 )
+                # Page deeper next cycle so the scout sweeps the WHOLE scope over
+                # time instead of re-scanning the same top targets every cycle.
+                self._immunefi_offset += self._settings.immunefi_max_targets_per_cycle
+                self._defillama_offset += request.per_chain_limit
                 targets = _merge_targets(bounty_targets, defillama_targets)
                 audits, skipped_limitations = await self._queue_targets(targets, request)
                 result = ScoutRunResult(
