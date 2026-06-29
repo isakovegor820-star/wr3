@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# wr3 — одна кнопка, чтобы запускать и проверять платформу.
+#
+#   ./wr3            показать статус (работает / не работает)
+#   ./wr3 start      включить (24/7, переживёт закрытие терминала)
+#   ./wr3 stop       выключить
+#   ./wr3 restart    перезапустить
+#   ./wr3 logs       показать живой лог
+#   ./wr3 boot       сделать так, чтобы запускалось само после перезагрузки (launchd)
+#
+set -uo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+API_DIR="$REPO/apps/api"
+ENV_FILE="$API_DIR/.env"
+LOG_DIR="$REPO/.wr3-logs"
+SUP="$REPO/scripts/run_autopilot_supervised.sh"
+PORT="${WR3_API_PORT:-8001}"
+HEALTH="http://127.0.0.1:$PORT/health"
+STATUS_URL="http://127.0.0.1:$PORT/v1/monitoring/scout/autopilot"
+
+# Движки (forge/slither/anvil/medusa) живут в homebrew/cargo — пропишем PATH явно,
+# чтобы платформа их нашла независимо от настроек терминала.
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.cargo/bin:$PATH"
+
+# --- маленькие помощники ---------------------------------------------------
+c_green(){ printf '  \033[32m🟢 %s\033[0m\n' "$1"; }
+c_red(){   printf '  \033[31m🔴 %s\033[0m\n' "$1"; }
+c_yellow(){ printf '  \033[33m🟡 %s\033[0m\n' "$1"; }
+c_dim(){   printf '       \033[2m%s\033[0m\n' "$1"; }
+
+_envval(){ [ -f "$ENV_FILE" ] && grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2- || true; }
+_dburl(){ local u; u="$(_envval WR3_DATABASE_URL)"; printf '%s' "${u:-postgresql:///wr3_local}"; }
+_supervisor_up(){ pgrep -f run_autopilot_supervised >/dev/null 2>&1; }
+_api_up(){ [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$HEALTH" 2>/dev/null)" = "200" ]; }
+
+# --- статус ----------------------------------------------------------------
+cmd_status(){
+  echo
+  echo "━━━━━━━━━━━━ wr3 · статус ━━━━━━━━━━━━"
+  local core_ok=1 autopilot_ok=0
+
+  if _supervisor_up; then c_green "Мотор — следит, чтобы всё жило и перезапускалось"
+  else c_red "Мотор — выключен"; core_ok=0; fi
+
+  if _api_up; then c_green "API — мозг платформы (порт $PORT)"
+  else c_red "API — не отвечает"; core_ok=0; fi
+
+  # автопилот (через статус-эндпойнт)
+  local tok ap
+  tok="$(_envval WR3_REVIEWER_TOKEN)"
+  ap="$(curl -s --max-time 6 "$STATUS_URL" -H "X-WR3-Reviewer: $tok" 2>/dev/null)"
+  if printf '%s' "$ap" | grep -q '"running":true'; then
+    autopilot_ok=$(printf '%s' "$ap" | python3 -c 'import sys,json
+d=json.load(sys.stdin)
+print(1 if d.get("healthy") else 0)
+import sys as s
+s.stderr.write("  цикл #%s · нашёл за всё время %s · проаудитил из очереди %s\n"%(d.get("cycle_count"),d.get("queued_total"),d.get("drained_total")))' 2>/tmp/wr3_ap_note)
+    if [ "${autopilot_ok:-0}" = "1" ]; then c_green "Автопилот — сам ищет и аудитит 24/7"
+    else c_yellow "Автопилот — запущен, но нездоров (завис?)"; fi
+    [ -f /tmp/wr3_ap_note ] && c_dim "$(cat /tmp/wr3_ap_note)"
+  else
+    c_red "Автопилот — не отвечает"
+  fi
+
+  # база
+  if psql "$(_dburl)" -At -c 'select 1' >/dev/null 2>&1; then c_green "База — память (хранит находки)"
+  else c_red "База — недоступна (Postgres не запущен?)"; fi
+
+  # триаж (конфиг)
+  local prov model
+  prov="$(_envval WR3_LLM_PROVIDER)"; model="$(_envval WR3_LLM_MODEL)"
+  if [ "${prov:-disabled}" != "disabled" ] && [ -n "$(_envval WR3_NAVY_API_KEY)$(_envval WR3_OPENROUTER_API_KEY)" ]; then
+    c_green "Триаж — умная оценка ($prov · ${model:-?})"
+  else
+    c_yellow "Триаж — простой режим (без ИИ-модели)"
+  fi
+
+  # бот
+  if [ -n "$(_envval WR3_TELEGRAM_BOT_TOKEN)" ]; then c_green "Бот — пишет тебе в Telegram (/queue, /report)"
+  else c_dim "Бот — не настроен"; fi
+
+  # живые цифры
+  local stats
+  stats="$(psql "$(_dburl)" -At -F'|' -c "select
+      (select count(*) from audit_jobs where state='queued'),
+      (select count(*) from audit_jobs where state='completed'),
+      (select count(*) from findings where exploitability='confirmed')" 2>/dev/null)"
+  if [ -n "$stats" ]; then
+    echo "  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄"
+    c_dim "в очереди: ${stats%%|*} · проверено: $(echo "$stats"|cut -d'|' -f2) · подтверждённых эксплойтов: ${stats##*|}"
+  fi
+
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  if [ "$core_ok" = 1 ] && [ "${autopilot_ok:-0}" = 1 ]; then
+    printf '  \033[1;32m✅ ПЛАТФОРМА РАБОТАЕТ\033[0m — охотится прямо сейчас.\n'
+    echo "     Делать ничего не надо. Находки придут в Telegram."
+  elif [ "$core_ok" = 1 ]; then
+    printf '  \033[1;33m🟡 РАБОТАЕТ ЧАСТИЧНО\033[0m — перезапусти:  ./wr3 restart\n'
+  else
+    printf '  \033[1;31m🔴 ПЛАТФОРМА НЕ РАБОТАЕТ\033[0m — включи:  ./wr3 start\n'
+  fi
+  echo
+}
+
+# --- старт -----------------------------------------------------------------
+cmd_start(){
+  if _supervisor_up && _api_up; then
+    echo "Уже работает 👍"; cmd_status; return 0
+  fi
+  echo "Запускаю платформу…"
+  # освобождаем порт, если завис старый процесс (частая причина «не стартует»)
+  pkill -f run_autopilot_supervised 2>/dev/null || true
+  lsof -ti "tcp:$PORT" 2>/dev/null | xargs kill -9 2>/dev/null || true
+  mkdir -p "$LOG_DIR"
+  # запускаем мотор отдельно от терминала — переживёт закрытие окна
+  WR3_SCOUT_AUTOPILOT_ENABLED=true nohup bash "$SUP" >>"$LOG_DIR/launcher.out.log" 2>&1 &
+  disown 2>/dev/null || true
+  echo "Жду, пока поднимется (до ~70с)…"
+  # curl сам ждёт и переспрашивает сервер, пока тот не ответит (без sleep)
+  curl -s -o /dev/null --retry 35 --retry-delay 2 --retry-connrefused --connect-timeout 3 "$HEALTH" 2>/dev/null || true
+  if _api_up; then echo "Поднялась ✅"; cmd_status
+  else echo "❌ Не поднялась. Лог:  ./wr3 logs"; tail -n 10 "$LOG_DIR/autopilot.err.log" 2>/dev/null; return 1; fi
+}
+
+# --- стоп ------------------------------------------------------------------
+cmd_stop(){
+  echo "Останавливаю…"
+  pkill -f run_autopilot_supervised 2>/dev/null && echo "  мотор остановлен" || echo "  мотор и так не работал"
+  lsof -ti "tcp:$PORT" 2>/dev/null | xargs kill -9 2>/dev/null && echo "  API остановлен" || true
+  echo "Выключено 🔌  (включить снова:  ./wr3 start)"
+}
+
+cmd_restart(){ cmd_stop; cmd_start; }
+cmd_logs(){ echo "Живой лог (Ctrl+C — выйти):"; tail -n 30 -f "$LOG_DIR/autopilot.out.log" 2>/dev/null; }
+
+cmd_boot(){
+  cat <<EOF
+Чтобы платформа сама стартовала после перезагрузки компа, выполни 2 команды:
+
+  cp "$REPO/infra/launchd/com.wr3.scout.local.plist" ~/Library/LaunchAgents/com.wr3.scout.plist
+  launchctl load ~/Library/LaunchAgents/com.wr3.scout.plist
+
+Проверить:   launchctl list | grep wr3
+Убрать:      launchctl unload ~/Library/LaunchAgents/com.wr3.scout.plist
+EOF
+}
+
+cmd_help(){ sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; }
+
+case "${1:-status}" in
+  status|"") cmd_status ;;
+  start|on)  cmd_start ;;
+  stop|off)  cmd_stop ;;
+  restart)   cmd_restart ;;
+  logs|log)  cmd_logs ;;
+  boot|install) cmd_boot ;;
+  help|-h|--help) cmd_help ;;
+  *) echo "Не знаю команду '$1'."; cmd_help; exit 1 ;;
+esac
