@@ -235,6 +235,38 @@ class AuditService:
                 break
         return out
 
+    def money_findings(self, *, limit: int = 10) -> list[dict[str, object]]:
+        """Confirmed high/critical findings worth submitting for a bounty — the ones
+        that can actually pay. In-scope paid programs first, richest payout first."""
+        out: list[dict[str, object]] = []
+        for record in self._audit_repository.list_records():
+            top = next(
+                (
+                    f
+                    for f in record.findings
+                    if f.severity in {Severity.CRITICAL, Severity.HIGH}
+                    and f.exploitability == Exploitability.CONFIRMED
+                ),
+                None,
+            )
+            if top is None:
+                continue
+            bounty = record.request.bounty
+            out.append(
+                {
+                    "id": str(record.audit_id)[:8],
+                    "chain": str(record.request.chain),
+                    "address": record.request.address,
+                    "program": bounty.program if bounty else None,
+                    "payout_usd": bounty.max_payout_usd if bounty else None,
+                    "url": bounty.url if bounty else None,
+                    "severity": str(top.severity),
+                    "bug": top.taxonomy.wr3_category,
+                }
+            )
+        out.sort(key=lambda item: (item["payout_usd"] is not None, item["payout_usd"] or 0), reverse=True)
+        return out[:limit]
+
     def find_recent_monitoring_audit(
         self,
         *,

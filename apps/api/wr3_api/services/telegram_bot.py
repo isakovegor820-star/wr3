@@ -11,9 +11,10 @@ from wr3_api.services.scout_autopilot import ScoutAutopilot
 
 _HELP = (
     "🤖 wr3 — команды:\n"
-    "/queue — последние находки (id, проект, баг)\n"
-    "/report <id> — собрать готовый отчёт для баунти\n"
-    "/status — здоровье автопилота\n"
+    "/money — находки, что стоит ПОДАТЬ за деньги 💰\n"
+    "/queue — все последние находки\n"
+    "/report <id> — готовый сабмит для баунти\n"
+    "/status — здоровье + расход navy\n"
     "/help — это сообщение\n\n"
     "id берёшь из пуша или из /queue (8 символов)."
 )
@@ -84,6 +85,8 @@ class TelegramCommandBot:
 
     def _handle(self, text: str) -> str:
         command = text.split()[0].lower().lstrip("/")
+        if command in {"money", "деньги", "money💰"}:
+            return self._cmd_money()
         if command in {"report", "отчёт", "отчет", "собери"}:
             return self._cmd_report(text)
         if command in {"queue", "очередь"}:
@@ -91,6 +94,25 @@ class TelegramCommandBot:
         if command in {"status", "статус"}:
             return self._cmd_status()
         return _HELP
+
+    def _cmd_money(self) -> str:
+        items = self._audit.money_findings(limit=10)
+        if not items:
+            return (
+                "💰 Пока нет подтверждённых high/critical для сабмита.\n"
+                "Это нормально — настоящий баг в аудированных протоколах редкость. "
+                "Робот сканит 24/7; как появится — будет здесь.\n\n"
+                "Все кандидаты (вкл. неподтверждённые): /queue"
+            )
+        lines = ["💰 Стоит подать — подтверждённые эксплойты:\n"]
+        for it in items:
+            payout = ""
+            if it.get("payout_usd"):
+                payout = " · до $" + f"{int(it['payout_usd']):,}".replace(",", " ")
+            scope = f" · {it['program']}" if it.get("program") else " · вне активной программы"
+            lines.append(f"🔴 {it['id']} · {it['severity']} · {it['bug']}{scope}{payout}")
+        lines.append("\n📄 Готовый сабмит: /report <id>")
+        return "\n".join(lines)
 
     def _cmd_report(self, text: str) -> str:
         match = _ID_RE.search(text)
@@ -103,6 +125,13 @@ class TelegramCommandBot:
         report = self._audit.bounty_submission_for(record)
         if report is None:
             return f"В аудите {prefix} нет находок для отчёта."
+        bounty = record.request.bounty
+        if bounty and bounty.url:
+            report += (
+                f"\n\n📤 Куда подать: {bounty.url}\n"
+                "Подавай ТОЛЬКО через программу (Immunefi), не команде напрямую. "
+                "Сверь точный scope и severity перед сабмитом."
+            )
         return report
 
     def _cmd_queue(self) -> str:
@@ -137,6 +166,14 @@ class TelegramCommandBot:
         except Exception:
             pass
         lines.append(f"🛰 Автопилот: цикл #{s.cycle_count} · разобрано из очереди {s.drained_total}")
+        try:  # расход navy за сегодня (персистентный счётчик)
+            from wr3_api.services.llm_triage import llm_budget_status
+
+            budget = llm_budget_status()
+            if budget.get("cap_per_day"):
+                lines.append(f"🧠 navy сегодня: {budget['used_today']}/{budget['cap_per_day']}")
+        except Exception:
+            pass
         if s.last_error:
             lines.append(f"⚠️ Последняя ошибка: {s.last_error}")
         return "\n".join(lines)
