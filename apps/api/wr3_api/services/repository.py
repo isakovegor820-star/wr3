@@ -91,6 +91,8 @@ class AuditRepository(Protocol):
 
     def list_queued_records(self, limit: int) -> list[AuditRecord]: ...
 
+    def platform_counts(self) -> dict[str, int]: ...
+
     def delete(self, audit_id: UUID) -> bool: ...
 
 
@@ -119,6 +121,14 @@ class InMemoryAuditRepository:
         queued = [r for r in self._records.values() if r.state == AuditState.QUEUED]
         queued.sort(key=lambda r: r.created_at)
         return queued[: max(limit, 0)]
+
+    def platform_counts(self) -> dict[str, int]:
+        records = list(self._records.values())
+        return {
+            "queued": sum(1 for r in records if r.state == AuditState.QUEUED),
+            "completed": sum(1 for r in records if r.state == AuditState.COMPLETED),
+            "confirmed": sum(1 for r in records for f in r.findings if str(f.exploitability) == "confirmed"),
+        }
 
     def delete(self, audit_id: UUID) -> bool:
         return self._records.pop(audit_id, None) is not None
@@ -210,6 +220,25 @@ class PostgresAuditRepository:
                 (str(AuditState.QUEUED), max(limit, 0)),
             ).fetchall()
         return [AuditRecord.model_validate(self._cipher.decrypt(row[0])) for row in rows]
+
+    def platform_counts(self) -> dict[str, int]:
+        # Aggregate COUNTs on indexed columns — no payload decryption needed.
+        with self._pool.connection() as conn:
+            queued = conn.execute(
+                "select count(*) from audit_jobs where state = %s", (str(AuditState.QUEUED),)
+            ).fetchone()
+            completed = conn.execute(
+                "select count(*) from audit_jobs where state = %s", (str(AuditState.COMPLETED),)
+            ).fetchone()
+            # 'confirmed' == str(Exploitability.CONFIRMED): a forge-verified exploit.
+            confirmed = conn.execute(
+                "select count(*) from findings where exploitability = %s", ("confirmed",)
+            ).fetchone()
+        return {
+            "queued": (queued or [0])[0],
+            "completed": (completed or [0])[0],
+            "confirmed": (confirmed or [0])[0],
+        }
 
     def delete(self, audit_id: UUID) -> bool:
         with self._pool.connection() as conn:
