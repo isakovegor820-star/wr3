@@ -248,6 +248,7 @@ class ScoutRunResult(BaseModel):
     discovered_count: int
     queued_count: int
     skipped_count: int
+    drained_count: int = 0
     targets: list[ScoutTarget]
     audits: list[ScoutQueuedAudit]
     limitations: list[str] = Field(default_factory=list)
@@ -263,6 +264,7 @@ class ScoutAutopilotStatus(BaseModel):
     process_queued: bool = True
     cycle_count: int = 0
     queued_total: int = 0
+    drained_total: int = 0
     last_run_at: datetime | None = None
     next_run_at: datetime | None = None
     last_heartbeat_at: datetime | None = None

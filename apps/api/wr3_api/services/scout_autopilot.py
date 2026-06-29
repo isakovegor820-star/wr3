@@ -56,6 +56,8 @@ class ScoutAutopilot:
         self._queued_total = 0
         self._immunefi_offset = 0
         self._defillama_offset = 0
+        self._inflight: set = set()  # audit_ids currently scheduled for processing
+        self._drained_total = 0
         self._restart_count = 0
         self._consecutive_failures = 0
         self._stall_alerted = False
@@ -99,6 +101,7 @@ class ScoutAutopilot:
             process_queued=self._settings.scout_autopilot_process_queued,
             cycle_count=self._cycle_count,
             queued_total=self._queued_total,
+            drained_total=self._drained_total,
             last_run_at=self._last_run_at,
             next_run_at=self._next_run_at,
             last_heartbeat_at=self._last_heartbeat_at,
@@ -253,11 +256,13 @@ class ScoutAutopilot:
                 self._defillama_offset += request.per_chain_limit
                 targets = _merge_targets(bounty_targets, defillama_targets)
                 audits, skipped_limitations = await self._queue_targets(targets, request)
+                drained = await self._drain_standing_queue(request)
                 result = ScoutRunResult(
                     source="immunefi+defillama_protocols" if bounty_targets else "defillama_protocols",
                     discovered_count=len(targets),
                     queued_count=len(audits),
                     skipped_count=len(targets) - len(audits),
+                    drained_count=drained,
                     targets=targets,
                     audits=audits,
                     limitations=[
@@ -268,6 +273,7 @@ class ScoutAutopilot:
                         "no_auto_support_messages",
                         "contacts_and_scope_require_manual_verification",
                         f"dedupe_window_hours:{request.dedupe_window_hours}",
+                        f"standing_queue_drained:{drained}",
                         *skipped_limitations,
                     ],
                 )
@@ -362,6 +368,7 @@ class ScoutAutopilot:
     def _schedule_processing(self, audit_id) -> None:
         # Route through the dispatcher: Celery (durable, survives an API restart)
         # when WR3_TASK_BACKEND=celery, otherwise an in-process asyncio task.
+        self._inflight.add(audit_id)
         _limitations, task = dispatch_audit_processing_detached(
             audit_id=audit_id,
             local_processor=self._audit_service.process_audit,
@@ -369,3 +376,28 @@ class ScoutAutopilot:
         if task is not None:
             self._processing_tasks.add(task)
             task.add_done_callback(self._processing_tasks.discard)
+            task.add_done_callback(lambda _t, _id=audit_id: self._inflight.discard(_id))
+        else:
+            # Celery path: no local handle to await — clear the guard now; the worker
+            # transitions the job out of QUEUED so a later drain won't re-pick it.
+            self._inflight.discard(audit_id)
+
+    async def _drain_standing_queue(self, request: ScoutAutopilotRunRequest) -> int:
+        """Process audits left QUEUED by earlier cycles (or manual runs) so the
+        standing queue never sits unprocessed — fresh-target processing only covers
+        what the current cycle discovers."""
+        limit = self._settings.scout_autopilot_drain_limit
+        if limit <= 0 or not request.process_queued:
+            return 0
+        # Pull a few extra so ids already mid-flight don't eat into the budget.
+        candidates = self._audit_service.list_queued_audit_ids(limit=limit + len(self._inflight))
+        drained = 0
+        for audit_id in candidates:
+            if drained >= limit:
+                break
+            if audit_id in self._inflight:
+                continue
+            self._schedule_processing(audit_id)
+            drained += 1
+        self._drained_total += drained
+        return drained
