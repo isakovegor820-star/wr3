@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# wr3 pre-audit — сгенерировать отчёт по контракту, который можно продать.
+#
+#   ./preaudit путь/к/Contract.sol            # обычный (со статикой + PoC)
+#   ./preaudit Contract.sol --deep            # + фаззинг (медленнее)
+#   ./preaudit Contract.sol --chain base
+#
+# Создаёт Contract-report.html (открой → печать в PDF → отдай клиенту).
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$REPO/apps/api/.venv/bin/python" "$REPO/scripts/preaudit.py" "$@"
