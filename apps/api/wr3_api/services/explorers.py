@@ -174,6 +174,79 @@ class EtherscanV2SourcePuller(ExplorerSourcePuller):
             await asyncio.sleep(self._settings.explorer_retry_backoff_seconds)
 
 
+class SourcifySourcePuller(ExplorerSourcePuller):
+    """Verified source from Sourcify — open, free, NO API key/account needed.
+
+    Coverage is smaller than Etherscan's but it requires no registration, so the
+    autopilot can read real Solidity (not bytecode) out of the box."""
+
+    name = "sourcify"
+    chain_ids: dict[Chain, str] = {
+        Chain.ETHEREUM: "1",
+        Chain.BASE: "8453",
+        Chain.BSC: "56",
+        Chain.ARBITRUM: "42161",
+    }
+
+    def __init__(self, settings: Settings | None = None, transport: httpx.AsyncBaseTransport | None = None) -> None:
+        self._settings = settings or get_settings()
+        self._transport = transport
+
+    def supports(self, chain: Chain) -> bool:
+        return chain in self.chain_ids
+
+    async def pull(self, *, chain: Chain, address: str) -> ExplorerSourceResult:
+        if chain not in self.chain_ids:
+            return ExplorerSourceResult(status="unsupported", reason=f"{chain} not supported by sourcify")
+        label = f"sourcify:{chain}"
+        url = f"https://sourcify.dev/server/v2/contract/{self.chain_ids[chain]}/{address}"
+        try:
+            async with httpx.AsyncClient(
+                timeout=self._settings.explorer_timeout_seconds, transport=self._transport
+            ) as client:
+                response = await client.get(url, params={"fields": "sources"})
+            if response.status_code == 404:
+                return ExplorerSourceResult(status="missing", reason=f"{label}_not_verified")
+            if response.status_code in {429, 500, 502, 503, 504}:
+                return ExplorerSourceResult(status="rate_limited", reason=f"{label}_retryable:{response.status_code}")
+            response.raise_for_status()
+        except httpx.TimeoutException:
+            return ExplorerSourceResult(status="rate_limited", reason=f"{label}_timeout")
+        except httpx.HTTPError as exc:
+            return ExplorerSourceResult(status="failed", reason=f"{label}_http_error:{exc.__class__.__name__}")
+        return parse_sourcify_v2_payload(response, label=label, address=address)
+
+
+def parse_sourcify_v2_payload(response: httpx.Response, *, label: str, address: str) -> ExplorerSourceResult:
+    try:
+        payload = response.json()
+    except ValueError:
+        return ExplorerSourceResult(status="failed", reason=f"{label}_invalid_json")
+    sources = payload.get("sources") if isinstance(payload, dict) else None
+    if not isinstance(sources, dict) or not sources:
+        return ExplorerSourceResult(status="missing", reason=f"{label}_no_sources")
+    parts: list[str] = []
+    contract_name = "Contract"
+    for name, entry in sorted(sources.items()):
+        content = entry.get("content") if isinstance(entry, dict) else entry
+        if not (isinstance(content, str) and content.strip() and name.endswith(".sol")):
+            continue
+        parts.append(f"// file: {name}\n{content}")
+        if contract_name == "Contract":
+            contract_name = name.rsplit("/", 1)[-1][:-4]
+    if not parts:
+        return ExplorerSourceResult(status="missing", reason=f"{label}_no_solidity_source")
+    return ExplorerSourceResult(
+        status="verified",
+        source="\n\n".join(parts),
+        contract_name=contract_name,
+        file_name="Contract.sol",
+        explorer_url=f"https://sourcify.dev/#/lookup/{address}",
+        verified_at=datetime.now(UTC),
+        metadata={"source": "sourcify", "match": payload.get("match")},
+    )
+
+
 def parse_etherscan_source_payload(response: httpx.Response, *, label: str, address: str) -> ExplorerSourceResult:
     try:
         payload = response.json()
@@ -220,7 +293,9 @@ def parse_etherscan_source_payload(response: httpx.Response, *, label: str, addr
 
 
 def default_explorer_pullers() -> list[ExplorerSourcePuller]:
-    return [EtherscanV2SourcePuller(), EtherscanFamilySourcePuller()]
+    # Sourcify first: it's keyless, so it works out of the box. Etherscan (better
+    # coverage, needs a key) is the fallback for contracts Sourcify doesn't have.
+    return [SourcifySourcePuller(), EtherscanV2SourcePuller(), EtherscanFamilySourcePuller()]
 
 
 def _unwrap_explorer_source(source_code: str) -> str:
