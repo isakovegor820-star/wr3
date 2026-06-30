@@ -1144,6 +1144,11 @@ class AuditService:
         if not high:
             return
         confirmed = [f for f in high if f.exploitability == Exploitability.CONFIRMED]
+        if get_settings().scout_alert_confirmed_only and not confirmed:
+            # Candidate-only finding (static flagged a pattern, forge couldn't prove
+            # it). On audited code these are almost all false positives — keep them in
+            # /queue + /money for manual review, but don't ping the owner with noise.
+            return
         top = (confirmed or high)[0]
         is_confirmed = top.exploitability == Exploitability.CONFIRMED
         is_critical = top.severity == Severity.CRITICAL
