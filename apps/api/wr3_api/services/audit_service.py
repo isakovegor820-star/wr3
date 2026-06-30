@@ -1154,7 +1154,14 @@ class AuditService:
         else:
             where = f"{record.request.chain} · скан по коду"
 
-        if is_confirmed:
+        in_paying_scope = bounty is not None and bool(bounty.max_payout_usd)
+        if in_paying_scope:
+            payout_str = "$" + f"{int(bounty.max_payout_usd):,}".replace(",", " ")
+            if is_confirmed:
+                title = f"💰 ДЕНЬГИ! Подтверждённый баг в ПЛАТЯЩЕЙ программе — до {payout_str}"
+            else:
+                title = f"💰 Кандидат в ПЛАТЯЩЕЙ программе (до {payout_str}) — нужна проверка"
+        elif is_confirmed:
             title = "🔴 wr3 нашёл КРИТИЧНЫЙ баг!" if is_critical else "🟠 wr3 нашёл серьёзный баг!"
         else:
             title = "🟡 wr3: кандидат на баг — нужна проверка"
