@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     # Cap how many audits compile/run forge/medusa concurrently in the in-process
     # backend, so a backlog can't spawn an unbounded subprocess storm.
     scout_autopilot_max_concurrent_audits: int = 4
+    # Only ping the owner for CONFIRMED (forge-proven) findings, not unproven
+    # candidates — on audited code those are almost all false positives, so
+    # candidate alerts are noise. Set false to also alert on candidates.
+    scout_alert_confirmed_only: bool = True
     # 24/7 self-healing: a watchdog restarts a dead loop and alerts on a stall.
     scout_watchdog_interval_seconds: int = 60
     scout_heartbeat_stall_factor: int = 3  # stalled if no heartbeat for factor*interval (+grace)

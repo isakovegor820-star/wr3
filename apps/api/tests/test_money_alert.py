@@ -61,6 +61,22 @@ async def test_alert_screams_money_when_in_paying_scope():
 
 
 @pytest.mark.asyncio
+async def test_no_alert_for_candidate_only_finding():
+    # confirmed_only defaults True: a candidate (not forge-proven) must NOT ping the
+    # owner — on audited code candidates are almost all false positives.
+    svc = AuditService()
+    notifier = _StubNotifier()
+    svc._notifications = notifier
+    record = await _monitoring_record(
+        svc, bounty=BountyContext(platform="immunefi", program="X", max_payout_usd=5000)
+    )
+    record.findings[0].exploitability = Exploitability.LIKELY  # candidate, not confirmed
+    notifier.sent.clear()
+    await svc._maybe_alert_owner(record)
+    assert notifier.sent == []
+
+
+@pytest.mark.asyncio
 async def test_alert_stays_plain_when_not_in_paying_scope():
     svc = AuditService()
     notifier = _StubNotifier()
