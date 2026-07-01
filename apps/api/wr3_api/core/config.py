@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     llm_max_calls_per_day: int = 0  # 0 = unlimited; >0 caps provider calls/day
     llm_kill_switch: bool = False  # force deterministic triage (no LLM calls)
     llm_max_tokens: int = 4000  # triage JSON grows with finding count; avoid truncation
+    # Cap how much contract source is embedded in each triage prompt. Real (Sourcify)
+    # multi-file protocols can be 100k+ tokens; sending the whole thing x4 agents blows
+    # the token budget. The finding summaries carry the "what", this is just context.
+    llm_max_source_chars: int = 20000  # ~5k tokens
     openrouter_api_key: str | None = None
     navy_api_key: str | None = None
     navy_base_url: str = "https://api.navy/v1"

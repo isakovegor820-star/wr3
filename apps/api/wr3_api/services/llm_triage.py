@@ -134,6 +134,16 @@ def _llm_budget_consume() -> bool:
     return True
 
 
+def _cap_source_for_triage(source: str) -> str:
+    """Truncate contract source to a token-budget-friendly size for the LLM prompt.
+    Real (Sourcify) multi-file protocols can be 100k+ tokens; the finding summaries
+    already carry the 'what', so the source here is only supporting context."""
+    cap = get_settings().llm_max_source_chars
+    if cap and len(source) > cap:
+        return source[:cap] + "\n\n// … [источник обрезан для экономии токенов]"
+    return source
+
+
 def worth_llm_triage(record: AuditRecord) -> bool:
     """Spend the LLM only where it can add signal: skip clean scans (no findings to
     reason about) and bytecode-only scans (heuristic noise, no real source). Keeps
@@ -326,7 +336,7 @@ class LlmTriageRouter:
                 f"Audit id: {record.audit_id}",
                 f"Chain: {record.request.chain}",
                 f"Findings: {finding_summaries}",
-                build_untrusted_source_block(source),
+                build_untrusted_source_block(_cap_source_for_triage(source)),
             ]
         )
 
